@@ -33,15 +33,15 @@ import (
 	"strconv"
 	"strings"
 
-	brokerv2alpha4 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha4"
-	"github.com/artemiscloud/activemq-artemis-operator/api/v2alpha5"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/client/clientset/versioned/typed/broker/v1beta1"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/configmaps"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/secrets"
-	ss "github.com/artemiscloud/activemq-artemis-operator/pkg/resources/statefulsets"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/jolokia"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/namer"
+	brokerv2alpha4 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha4"
+	"github.com/arkmq-org/activemq-artemis-operator/api/v2alpha5"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/client/clientset/versioned/typed/broker/v1beta1"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/configmaps"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/secrets"
+	ss "github.com/arkmq-org/activemq-artemis-operator/pkg/resources/statefulsets"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/jolokia"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/namer"
 	"github.com/blang/semver/v4"
 
 	"time"
@@ -50,7 +50,7 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/artemiscloud/activemq-artemis-operator/version"
+	"github.com/arkmq-org/activemq-artemis-operator/version"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
@@ -64,8 +64,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/cr2jinja2"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/cr2jinja2"
 
 	"github.com/Azure/go-amqp"
 	routev1 "github.com/openshift/api/route/v1"
@@ -648,7 +648,7 @@ var _ = Describe("artemis controller", func() {
 		It("version validation when both version and images are explicitly specified", func() {
 			By("deploy a broker with images specified")
 			brokerCr, createdBrokerCr := DeployCustomBroker(defaultNamespace, func(candidate *brokerv1beta1.ActiveMQArtemis) {
-				candidate.Spec.Version = version.LatestVersion
+				candidate.Spec.Version = version.GetDefaultVersion()
 				candidate.Spec.DeploymentPlan.Image = "myrepo/my-image:1.0"
 				candidate.Spec.DeploymentPlan.InitImage = "myrepo/my-init-image:1.0"
 			})
@@ -666,7 +666,7 @@ var _ = Describe("artemis controller", func() {
 
 		It("version validation when version is loosly specified and images are explicitly specified", func() {
 			By("deploy a broker with images specified")
-			latestVersion := semver.MustParse(version.LatestVersion)
+			latestVersion := semver.MustParse(version.GetDefaultVersion())
 			brokerCr, createdBrokerCr := DeployCustomBroker(defaultNamespace, func(candidate *brokerv1beta1.ActiveMQArtemis) {
 				candidate.Spec.Version = strconv.FormatUint(latestVersion.Major, 10)
 				candidate.Spec.DeploymentPlan.Image = "myrepo/my-image:1.0"
@@ -691,7 +691,7 @@ var _ = Describe("artemis controller", func() {
 
 		It("version validation when version and images are loosly specified", func() {
 			By("deploy a broker with images default and version")
-			latestVersion := semver.MustParse(version.LatestVersion)
+			latestVersion := semver.MustParse(version.GetDefaultVersion())
 			brokerCr, createdBrokerCr := DeployCustomBroker(defaultNamespace, func(candidate *brokerv1beta1.ActiveMQArtemis) {
 				candidate.Spec.Version = strconv.FormatUint(latestVersion.Major, 10)
 				candidate.Spec.DeploymentPlan.Image = "placeholder"
@@ -861,14 +861,14 @@ var _ = Describe("artemis controller", func() {
 		})
 
 		It("specify only major version", func() {
-			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_"+version.CompactLatestVersion, "quay.io/artemiscloud/fake-broker:latest")
-			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_"+version.CompactLatestVersion, "quay.io/artemiscloud/fake-broker-init:latest")
+			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_"+version.GetDefaultCompactVersion(), "quay.io/arkmq-org/fake-broker:latest")
+			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_"+version.GetDefaultCompactVersion(), "quay.io/arkmq-org/fake-broker-init:latest")
 			defer func() {
-				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_" + version.CompactLatestVersion)
-				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_" + version.CompactLatestVersion)
+				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_" + version.GetDefaultCompactVersion())
+				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_" + version.GetDefaultCompactVersion())
 			}()
 			By("deploy a broker")
-			verFields := strings.Split(version.LatestVersion, ".")
+			verFields := strings.Split(version.GetDefaultVersion(), ".")
 			major := verFields[0]
 			brokerCr, createdBrokerCr := DeployCustomBroker(defaultNamespace, func(candidate *brokerv1beta1.ActiveMQArtemis) {
 				candidate.Spec.Version = major
@@ -880,9 +880,9 @@ var _ = Describe("artemis controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, ssKey, createdSs)).Should(Succeed())
 				mainContainer := createdSs.Spec.Template.Spec.Containers[0]
-				g.Expect(mainContainer.Image).To(Equal("quay.io/artemiscloud/fake-broker:latest"))
+				g.Expect(mainContainer.Image).To(Equal("quay.io/arkmq-org/fake-broker:latest"))
 				initContainer := createdSs.Spec.Template.Spec.InitContainers[0]
-				g.Expect(initContainer.Image).To(Equal("quay.io/artemiscloud/fake-broker-init:latest"))
+				g.Expect(initContainer.Image).To(Equal("quay.io/arkmq-org/fake-broker-init:latest"))
 
 			}, timeout, interval).Should(Succeed())
 
@@ -896,7 +896,7 @@ var _ = Describe("artemis controller", func() {
 
 				g.Expect(createdBrokerCr.Status.Version.Image).Should(ContainSubstring("fake"))
 				g.Expect(createdBrokerCr.Status.Version.InitImage).Should(ContainSubstring("fake"))
-				g.Expect(createdBrokerCr.Status.Version.BrokerVersion).Should(Equal(version.LatestVersion))
+				g.Expect(createdBrokerCr.Status.Version.BrokerVersion).Should(Equal(version.GetDefaultVersion()))
 
 				g.Expect(createdBrokerCr.Status.Upgrade.MajorUpdates).Should(BeFalse())
 				g.Expect(createdBrokerCr.Status.Upgrade.MinorUpdates).Should(BeTrue())
@@ -909,14 +909,14 @@ var _ = Describe("artemis controller", func() {
 		})
 
 		It("specify only major.minor version", func() {
-			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_"+version.CompactLatestVersion, "quay.io/artemiscloud/fake-broker:latest")
-			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_"+version.CompactLatestVersion, "quay.io/artemiscloud/fake-broker-init:latest")
+			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_"+version.GetDefaultCompactVersion(), "quay.io/arkmq-org/fake-broker:latest")
+			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_"+version.GetDefaultCompactVersion(), "quay.io/arkmq-org/fake-broker-init:latest")
 			defer func() {
-				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_" + version.CompactLatestVersion)
-				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_" + version.CompactLatestVersion)
+				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_" + version.GetDefaultCompactVersion())
+				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_" + version.GetDefaultCompactVersion())
 			}()
 			By("deploy a broker")
-			verFields := strings.Split(version.LatestVersion, ".")
+			verFields := strings.Split(version.GetDefaultVersion(), ".")
 			major := verFields[0]
 			minor := verFields[1]
 			brokerCr, createdBrokerCr := DeployCustomBroker(defaultNamespace, func(candidate *brokerv1beta1.ActiveMQArtemis) {
@@ -931,9 +931,9 @@ var _ = Describe("artemis controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, ssKey, createdSs)).Should(Succeed())
 				mainContainer := createdSs.Spec.Template.Spec.Containers[0]
-				g.Expect(mainContainer.Image).To(Equal("quay.io/artemiscloud/fake-broker:latest"))
+				g.Expect(mainContainer.Image).To(Equal("quay.io/arkmq-org/fake-broker:latest"))
 				initContainer := createdSs.Spec.Template.Spec.InitContainers[0]
-				g.Expect(initContainer.Image).To(Equal("quay.io/artemiscloud/fake-broker-init:latest"))
+				g.Expect(initContainer.Image).To(Equal("quay.io/arkmq-org/fake-broker-init:latest"))
 
 			}, timeout, interval).Should(Succeed())
 
@@ -945,7 +945,7 @@ var _ = Describe("artemis controller", func() {
 
 				g.Expect(createdBrokerCr.Status.Version.Image).Should(ContainSubstring("fake"))
 				g.Expect(createdBrokerCr.Status.Version.InitImage).Should(ContainSubstring("fake"))
-				g.Expect(createdBrokerCr.Status.Version.BrokerVersion).Should(Equal(version.LatestVersion))
+				g.Expect(createdBrokerCr.Status.Version.BrokerVersion).Should(Equal(version.GetDefaultVersion()))
 
 				g.Expect(createdBrokerCr.Status.Upgrade.MajorUpdates).Should(BeFalse())
 				g.Expect(createdBrokerCr.Status.Upgrade.MinorUpdates).Should(BeFalse())
@@ -958,11 +958,11 @@ var _ = Describe("artemis controller", func() {
 		})
 
 		It("default broker versions", func() {
-			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_"+version.CompactLatestVersion, "quay.io/artemiscloud/fake-broker:latest")
-			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_"+version.CompactLatestVersion, "quay.io/artemiscloud/fake-broker-init:latest")
+			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_"+version.GetDefaultCompactVersion(), "quay.io/arkmq-org/fake-broker:latest")
+			os.Setenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_"+version.GetDefaultCompactVersion(), "quay.io/arkmq-org/fake-broker-init:latest")
 			defer func() {
-				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_" + version.CompactLatestVersion)
-				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_" + version.CompactLatestVersion)
+				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Kubernetes_" + version.GetDefaultCompactVersion())
+				os.Unsetenv("RELATED_IMAGE_ActiveMQ_Artemis_Broker_Init_" + version.GetDefaultCompactVersion())
 			}()
 			By("deploy a broker")
 			brokerCr, createdBrokerCr := DeployCustomBroker(defaultNamespace, func(candidate *brokerv1beta1.ActiveMQArtemis) {
@@ -977,9 +977,9 @@ var _ = Describe("artemis controller", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, ssKey, createdSs)).Should(Succeed())
 				mainContainer := createdSs.Spec.Template.Spec.Containers[0]
-				g.Expect(mainContainer.Image).To(Equal("quay.io/artemiscloud/fake-broker:latest"))
+				g.Expect(mainContainer.Image).To(Equal("quay.io/arkmq-org/fake-broker:latest"))
 				initContainer := createdSs.Spec.Template.Spec.InitContainers[0]
-				g.Expect(initContainer.Image).To(Equal("quay.io/artemiscloud/fake-broker-init:latest"))
+				g.Expect(initContainer.Image).To(Equal("quay.io/arkmq-org/fake-broker-init:latest"))
 
 			}, timeout, interval).Should(Succeed())
 
@@ -991,7 +991,7 @@ var _ = Describe("artemis controller", func() {
 
 				g.Expect(createdBrokerCr.Status.Version.Image).Should(ContainSubstring("fake"))
 				g.Expect(createdBrokerCr.Status.Version.InitImage).Should(ContainSubstring("fake"))
-				g.Expect(createdBrokerCr.Status.Version.BrokerVersion).Should(Equal(version.LatestVersion))
+				g.Expect(createdBrokerCr.Status.Version.BrokerVersion).Should(Equal(version.GetDefaultVersion()))
 
 				g.Expect(createdBrokerCr.Status.Upgrade.MajorUpdates).Should(BeTrue())
 				g.Expect(createdBrokerCr.Status.Upgrade.MinorUpdates).Should(BeTrue())
@@ -1069,7 +1069,12 @@ var _ = Describe("artemis controller", func() {
 	Context("broker resource tracking", Label("broker-resource-tracking-context"), func() {
 		It("default user credential secret", func() {
 			By("deploy a broker")
-			brokerCr, _ := DeployCustomBroker(defaultNamespace, nil)
+			brokerCr, createdBrokerCr := DeployCustomBroker(defaultNamespace, nil)
+
+			var amqUser []byte
+			var amqPassword []byte
+			var amqClusterUser []byte
+			var amqClusterPassword []byte
 
 			By("checking the default credential secret created")
 			credSecretKey := types.NamespacedName{
@@ -1081,7 +1086,18 @@ var _ = Describe("artemis controller", func() {
 			ssKey := types.NamespacedName{Name: namer.CrToSS(brokerCr.Name), Namespace: defaultNamespace}
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, credSecretKey, credSecret)).Should(Succeed())
+
+				var amqKeyFound bool
 				g.Expect(len(credSecret.Data)).To(Equal(4))
+				amqUser, amqKeyFound = credSecret.Data["AMQ_USER"]
+				g.Expect(amqKeyFound).Should(BeTrue())
+				amqPassword, amqKeyFound = credSecret.Data["AMQ_PASSWORD"]
+				g.Expect(amqKeyFound).Should(BeTrue())
+				amqClusterUser, amqKeyFound = credSecret.Data["AMQ_CLUSTER_USER"]
+				g.Expect(amqKeyFound).Should(BeTrue())
+				amqClusterPassword, amqKeyFound = credSecret.Data["AMQ_CLUSTER_PASSWORD"]
+				g.Expect(amqKeyFound).Should(BeTrue())
+
 				g.Expect(len(credSecret.OwnerReferences) > 0).Should(BeTrue())
 				ownerFound := false
 				for _, oref := range credSecret.OwnerReferences {
@@ -1126,6 +1142,87 @@ var _ = Describe("artemis controller", func() {
 				g.Expect(clusterUserFound).To(BeTrue())
 				g.Expect(clusterPasswordFound).To(BeTrue())
 
+			}, timeout, interval).Should(Succeed())
+
+			By("update the broker to trigger reconcile")
+			brokerKey := types.NamespacedName{
+				Name:      brokerCr.Name,
+				Namespace: defaultNamespace,
+			}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, brokerKey, createdBrokerCr)).Should(Succeed())
+				createdBrokerCr.Spec.Env = append(createdBrokerCr.Spec.Env, corev1.EnvVar{Name: "NEW_VAR", Value: "NEW_VALUE"})
+				g.Expect(k8sClient.Update(ctx, createdBrokerCr)).Should(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			newCreatedBrokerCr := brokerv1beta1.ActiveMQArtemis{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, brokerKey, &newCreatedBrokerCr)).Should(Succeed())
+				g.Expect(len(newCreatedBrokerCr.Spec.Env)).To(Equal(1))
+				g.Expect(newCreatedBrokerCr.Spec.Env[0].Name).To(Equal("NEW_VAR"))
+				g.Expect(newCreatedBrokerCr.Spec.Env[0].Value).To(Equal("NEW_VALUE"))
+			}, timeout, interval).Should(Succeed())
+
+			newSS := &appsv1.StatefulSet{}
+			credSecretAfterRecon := &corev1.Secret{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, ssKey, newSS)).Should(Succeed())
+
+				container := newSS.Spec.Template.Spec.Containers[0]
+				newVarFound := false
+				for _, envVar := range container.Env {
+					if envVar.Name == "NEW_VAR" {
+						newVarFound = true
+						g.Expect(envVar.Value).To(Equal("NEW_VALUE"))
+					}
+				}
+				g.Expect(newVarFound).To(BeTrue())
+
+				initContainer := newSS.Spec.Template.Spec.InitContainers[0]
+				userFound := false
+				passwordFound := false
+				clusterUserFound := false
+				clusterPasswordFound := false
+				for _, envVar := range initContainer.Env {
+					if envVar.Name == "AMQ_USER" {
+						userFound = true
+						g.Expect(envVar.ValueFrom.SecretKeyRef.Name).To(Equal(credSecretKey.Name))
+						g.Expect(envVar.ValueFrom.SecretKeyRef.Key).To(Equal("AMQ_USER"))
+					} else if envVar.Name == "AMQ_PASSWORD" {
+						passwordFound = true
+						g.Expect(envVar.ValueFrom.SecretKeyRef.Name).To(Equal(credSecretKey.Name))
+						g.Expect(envVar.ValueFrom.SecretKeyRef.Key).To(Equal("AMQ_PASSWORD"))
+					} else if envVar.Name == "AMQ_CLUSTER_USER" {
+						clusterUserFound = true
+						g.Expect(envVar.ValueFrom.SecretKeyRef.Name).To(Equal(credSecretKey.Name))
+						g.Expect(envVar.ValueFrom.SecretKeyRef.Key).To(Equal("AMQ_CLUSTER_USER"))
+					} else if envVar.Name == "AMQ_CLUSTER_PASSWORD" {
+						clusterPasswordFound = true
+						g.Expect(envVar.ValueFrom.SecretKeyRef.Name).To(Equal(credSecretKey.Name))
+						g.Expect(envVar.ValueFrom.SecretKeyRef.Key).To(Equal("AMQ_CLUSTER_PASSWORD"))
+					}
+				}
+				g.Expect(userFound).To(BeTrue())
+				g.Expect(passwordFound).To(BeTrue())
+				g.Expect(clusterUserFound).To(BeTrue())
+				g.Expect(clusterPasswordFound).To(BeTrue())
+
+				g.Expect(k8sClient.Get(ctx, credSecretKey, credSecretAfterRecon)).Should(Succeed())
+				g.Expect(credSecretAfterRecon.Data["AMQ_USER"]).To(Equal(amqUser))
+				g.Expect(credSecretAfterRecon.Data["AMQ_PASSWORD"]).To(Equal(amqPassword))
+				g.Expect(credSecretAfterRecon.Data["AMQ_CLUSTER_USER"]).To(Equal(amqClusterUser))
+				g.Expect(credSecretAfterRecon.Data["AMQ_CLUSTER_PASSWORD"]).To(Equal(amqClusterPassword))
+
+				g.Expect(len(credSecretAfterRecon.OwnerReferences) > 0).Should(BeTrue())
+				ownerFound := false
+				for _, oref := range credSecretAfterRecon.OwnerReferences {
+					if oref.Kind == artemisGvk.Kind && oref.Name == brokerCr.Name {
+						ownerFound = true
+						break
+					}
+				}
+				g.Expect(ownerFound).To(BeTrue())
 			}, timeout, interval).Should(Succeed())
 
 			CleanResource(brokerCr, brokerCr.Name, defaultNamespace)
@@ -1605,14 +1702,14 @@ var _ = Describe("artemis controller", func() {
 		It("default image to use latest", func() {
 			crd := generateArtemisSpec(defaultNamespace)
 			imageToUse := common.DetermineImageToUse(&crd, "Kubernetes")
-			Expect(imageToUse).To(Equal(version.LatestKubeImage), "actual", imageToUse)
+			Expect(imageToUse).To(Equal(version.GetDefaultKubeImage()), "actual", imageToUse)
 
 			imageToUse = common.DetermineImageToUse(&crd, "Init")
-			Expect(imageToUse).To(Equal(version.LatestInitImage), "actual", imageToUse)
+			Expect(imageToUse).To(Equal(version.GetDefaultInitImage()), "actual", imageToUse)
 			brokerCr := generateArtemisSpec(defaultNamespace)
 			compactVersionToUse, verr := common.DetermineCompactVersionToUse(&brokerCr)
 			Expect(verr).To(BeNil())
-			Expect(compactVersionToUse).To(Equal(version.CompactLatestVersion), "actual", compactVersionToUse)
+			Expect(compactVersionToUse).To(Equal(version.GetDefaultCompactVersion()), "actual", compactVersionToUse)
 		})
 	})
 
@@ -2258,7 +2355,7 @@ var _ = Describe("artemis controller", func() {
 				}
 
 				// force a non-fatal failure for the validation of the broker images
-				candidate.Spec.DeploymentPlan.Image = version.LatestKubeImage
+				candidate.Spec.DeploymentPlan.Image = version.GetDefaultKubeImage()
 				candidate.Spec.Version = ""
 			})
 
@@ -3312,7 +3409,7 @@ var _ = Describe("artemis controller", func() {
 	})
 
 	Context("PVC no gc test", func() {
-		It("deploy, verify, undeploy, verify", func() {
+		It("deploy, verify, undeploy, verify, redeploy, verify", func() {
 
 			crd := generateArtemisSpec(defaultNamespace)
 			crd.Spec.DeploymentPlan.PersistenceEnabled = true
@@ -3334,6 +3431,18 @@ var _ = Describe("artemis controller", func() {
 					g.Expect(meta.IsStatusConditionTrue(createdCrd.Status.Conditions, brokerv1beta1.ReadyConditionType)).Should(BeTrue())
 				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 
+				podName := namer.CrToSS(crd.Name) + "-0"
+
+				By("sending a message to 1")
+				Eventually(func(g Gomega) {
+
+					sendCmd := []string{"amq-broker/bin/artemis", "producer", "--user", "Jay", "--password", "activemq", "--url", "tcp://" + podName + ":61616", "--message-count", "1", "--destination", "queue://DLQ", "--verbose"}
+					content, err := RunCommandInPod(podName, crd.Name+"-container", sendCmd)
+					g.Expect(err).To(BeNil())
+					g.Expect(*content).Should(ContainSubstring("Produced: 1 messages"))
+
+				}, timeout, interval).Should(Succeed())
+
 				By("finding PVC")
 				pvcKey := types.NamespacedName{Namespace: defaultNamespace, Name: crd.Name + "-" + namer.CrToSS(crd.Name) + "-0"}
 				pvc := &corev1.PersistentVolumeClaim{}
@@ -3346,8 +3455,65 @@ var _ = Describe("artemis controller", func() {
 
 				Eventually(func(g Gomega) {
 					By("again finding PVC b/c it has not been gc'ed - " + pvcKey.Name)
-					g.Expect(k8sClient.Get(ctx, pvcKey, &corev1.PersistentVolumeClaim{})).Should(Succeed())
+					g.Expect(k8sClient.Get(ctx, pvcKey, pvc)).Should(Succeed())
 				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+				By("retaining the PV " + crd.ObjectMeta.Name)
+				Eventually(func(g Gomega) {
+					pvKey := types.NamespacedName{Namespace: defaultNamespace, Name: pvc.Spec.VolumeName}
+					pv := &corev1.PersistentVolume{}
+
+					g.Expect(k8sClient.Get(ctx, pvKey, pv)).Should(Succeed())
+
+					pv.Spec.PersistentVolumeReclaimPolicy = corev1.PersistentVolumeReclaimRetain
+					Expect(k8sClient.Update(ctx, pv)).Should(Succeed())
+				}, timeout, interval).Should(Succeed())
+
+				By("deleting the PVC " + crd.ObjectMeta.Name)
+				Expect(k8sClient.Delete(ctx, pvc)).Should(Succeed())
+
+				By("updating the PV " + crd.ObjectMeta.Name)
+				Eventually(func(g Gomega) {
+					pvKey := types.NamespacedName{Namespace: defaultNamespace, Name: pvc.Spec.VolumeName}
+					pv := &corev1.PersistentVolume{}
+
+					g.Expect(k8sClient.Get(ctx, pvKey, pv)).Should(Succeed())
+
+					pv.Spec.ClaimRef.Name = crd.Name + "c-" + namer.CrToSS(crd.Name+"c") + "-0"
+					pv.Spec.ClaimRef.UID = ""
+					pv.Spec.ClaimRef.ResourceVersion = ""
+					g.Expect(k8sClient.Update(ctx, pv)).Should(Succeed())
+				}, timeout, interval).Should(Succeed())
+
+				By("Redeploying the CRD " + crd.ObjectMeta.Name)
+				newCrd := crd
+				newCrd.ResourceVersion = ""
+				newCrd.Name = crd.Name + "c"
+				Expect(k8sClient.Create(ctx, &newCrd)).Should(Succeed())
+
+				newCreatedCrd := &brokerv1beta1.ActiveMQArtemis{}
+				newBrokerKey := types.NamespacedName{Name: newCrd.Name, Namespace: defaultNamespace}
+
+				By("verifing started")
+				Eventually(func(g Gomega) {
+
+					g.Expect(k8sClient.Get(ctx, newBrokerKey, newCreatedCrd)).Should(Succeed())
+					g.Expect(len(newCreatedCrd.Status.PodStatus.Ready)).Should(BeEquivalentTo(1))
+					g.Expect(meta.IsStatusConditionTrue(newCreatedCrd.Status.Conditions, brokerv1beta1.DeployedConditionType)).Should(BeTrue())
+					g.Expect(meta.IsStatusConditionTrue(newCreatedCrd.Status.Conditions, brokerv1beta1.ReadyConditionType)).Should(BeTrue())
+				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+				newPodName := namer.CrToSS(newCrd.Name) + "-0"
+
+				By("Receiving a message from 0")
+				Eventually(func(g Gomega) {
+
+					rcvCmd := []string{"amq-broker/bin/artemis", "consumer", "--user", "Jay", "--password", "activemq", "--url", "tcp://" + newPodName + ":61616", "--message-count", "1", "--destination", "queue://DLQ", "--receive-timeout", "10000", "--break-on-null", "--verbose"}
+					content, err := RunCommandInPod(newPodName, newCrd.Name+"-container", rcvCmd)
+					g.Expect(err).To(BeNil())
+					g.Expect(*content).Should(ContainSubstring("JMS Message ID:"))
+
+				}, timeout, interval).Should(Succeed())
 			}
 		})
 	})
@@ -5767,48 +5933,6 @@ var _ = Describe("artemis controller", func() {
 			Expect(k8sClient.Delete(ctx, createdCrd)).Should(Succeed())
 		})
 
-		It("Respect JAVA_OPTS config map", func() {
-			ctx := context.Background()
-			crd := generateArtemisSpec(defaultNamespace)
-			// this will mimic an existing deployment using JAVA_OPTS
-			crd.Spec.Env = []corev1.EnvVar{{Name: "JAVA_OPTS", Value: "-Da=b"}}
-
-			Expect(k8sClient.Create(ctx, &crd)).Should(Succeed())
-
-			By("By checking the container stateful set for java opts referencing brokerProperties")
-			Eventually(func(g Gomega) {
-				key := types.NamespacedName{Name: namer.CrToSS(crd.Name), Namespace: defaultNamespace}
-				createdSs := &appsv1.StatefulSet{}
-
-				g.Expect(k8sClient.Get(ctx, key, createdSs)).To(Succeed())
-
-				found := false
-				for _, container := range createdSs.Spec.Template.Spec.InitContainers {
-					for _, env := range container.Env {
-						if env.Name == "JAVA_OPTS" {
-							if strings.Contains(env.Value, brokerPropertiesMatchString) {
-								found = true
-							}
-						}
-					}
-				}
-				g.Expect(found).To(BeTrue())
-
-				found_JDK_JAVA_OPTIONS := false
-				for _, container := range createdSs.Spec.Template.Spec.Containers {
-					for _, env := range container.Env {
-						if env.Name == "JDK_JAVA_OPTIONS" {
-							found_JDK_JAVA_OPTIONS = true
-						}
-					}
-				}
-				g.Expect(found_JDK_JAVA_OPTIONS).To(BeFalse())
-
-			}, duration, interval).Should(Succeed())
-
-			CleanResource(&crd, crd.Name, defaultNamespace)
-		})
-
 		It("Expect two crs to coexist", func() {
 			By("By creating two crds with BrokerProperties in the spec")
 			ctx := context.Background()
@@ -5889,7 +6013,7 @@ var _ = Describe("artemis controller", func() {
 			ctx := context.Background()
 			crd := generateArtemisSpec(defaultNamespace)
 
-			latestVersion := semver.MustParse(version.LatestVersion)
+			latestVersion := semver.MustParse(version.GetDefaultVersion())
 			crd.Spec.Version = strconv.FormatUint(latestVersion.Major, 10)
 			Expect(k8sClient.Create(ctx, &crd)).Should(Succeed())
 
@@ -5922,8 +6046,8 @@ var _ = Describe("artemis controller", func() {
 			ctx := context.Background()
 			crd := generateArtemisSpec(defaultNamespace)
 
-			crd.Spec.DeploymentPlan.Image = version.LatestKubeImage
-			crd.Spec.Version = version.LatestVersion
+			crd.Spec.DeploymentPlan.Image = version.GetDefaultKubeImage()
+			crd.Spec.Version = version.GetDefaultVersion()
 			Expect(k8sClient.Create(ctx, &crd)).Should(Succeed())
 
 			crdRef := types.NamespacedName{
@@ -5959,7 +6083,7 @@ var _ = Describe("artemis controller", func() {
 			ctx := context.Background()
 			crd := generateArtemisSpec(defaultNamespace)
 
-			crd.Spec.DeploymentPlan.Image = version.LatestKubeImage
+			crd.Spec.DeploymentPlan.Image = version.GetDefaultKubeImage()
 			crd.Spec.Version = version.SupportedActiveMQArtemisVersions[0]
 			Expect(k8sClient.Create(ctx, &crd)).Should(Succeed())
 
@@ -6049,6 +6173,8 @@ var _ = Describe("artemis controller", func() {
 				g.Expect(deployCondition.Message).To(ContainSubstring(debugArgsEnvVarName))
 			}, timeout, interval).Should(Succeed())
 
+			By("deleting the CR")
+			CleanResource(createdCrd, createdCrd.Name, defaultNamespace)
 		})
 
 		It("validate user directly using internal env vars", Label("invalid-internal-var-usage"), func() {
@@ -6837,17 +6963,17 @@ var _ = Describe("artemis controller", func() {
 				Skip("The supported ActiveMQ Artemis versions are less than 4")
 			}
 			previousVersion := orderedSemVersions[len(orderedSemVersions)-4]
-			Expect(previousVersion.String()).ShouldNot(Equal(version.LatestVersion))
+			Expect(previousVersion.String()).ShouldNot(Equal(version.GetDefaultVersion()))
 
 			previousCompactVersion := version.CompactActiveMQArtemisVersion(previousVersion.String())
-			Expect(previousCompactVersion).ShouldNot(Equal(version.CompactLatestVersion))
+			Expect(previousCompactVersion).ShouldNot(Equal(version.GetDefaultCompactVersion()))
 
 			previousImageEnvVar := common.ImageNamePrefix + "Kubernetes_" + previousCompactVersion
-			os.Setenv(previousImageEnvVar, strings.Replace(version.LatestKubeImage, version.LatestVersion, previousVersion.String(), 1))
+			os.Setenv(previousImageEnvVar, strings.Replace(version.GetDefaultKubeImage(), version.GetDefaultVersion(), previousVersion.String(), 1))
 			defer os.Unsetenv(previousImageEnvVar)
 
 			perviousInitImageEnvVar := common.ImageNamePrefix + "Init_" + previousCompactVersion
-			os.Setenv(perviousInitImageEnvVar, strings.Replace(version.LatestInitImage, version.LatestVersion, previousVersion.String(), 1))
+			os.Setenv(perviousInitImageEnvVar, strings.Replace(version.GetDefaultInitImage(), version.GetDefaultVersion(), previousVersion.String(), 1))
 			defer os.Unsetenv(perviousInitImageEnvVar)
 
 			By("By creating a crd without persistence")
@@ -6907,7 +7033,7 @@ var _ = Describe("artemis controller", func() {
 
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: crd.ObjectMeta.Name, Namespace: crd.ObjectMeta.Namespace}, createdCrd)).Should(Succeed())
 
-				createdCrd.Spec.Version = version.LatestVersion
+				createdCrd.Spec.Version = version.GetDefaultVersion()
 				g.Expect(k8sClient.Update(ctx, createdCrd)).Should(Succeed())
 
 			}, timeout, interval).Should(Succeed())
@@ -6941,10 +7067,6 @@ var _ = Describe("artemis controller", func() {
 			ctx := context.Background()
 			crd := generateArtemisSpec(defaultNamespace)
 
-			crd.Spec.DeploymentPlan.LivenessProbe = &corev1.Probe{
-				InitialDelaySeconds: 1,
-				PeriodSeconds:       2,
-			}
 			crd.Spec.DeploymentPlan.ReadinessProbe = &corev1.Probe{
 				InitialDelaySeconds: 1,
 				PeriodSeconds:       2,
@@ -7955,6 +8077,49 @@ var _ = Describe("artemis controller", func() {
 					g.Expect(condition.Message).To(ContainSubstring("PersistentVolumeClaims"))
 				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 			}
+
+			CleanResource(&crd, crd.Name, defaultNamespace)
+		})
+
+		It("Checking storage size mal configured", func() {
+
+			By("By creating a new crd")
+			ctx := context.Background()
+			crd := generateArtemisSpec(defaultNamespace)
+
+			crd.Spec.DeploymentPlan = brokerv1beta1.DeploymentPlanType{
+				Size:               common.Int32ToPtr(1),
+				PersistenceEnabled: true,
+				Storage: brokerv1beta1.StorageType{
+					Size: "2GI", // note wrong capital I
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, &crd)).Should(Succeed())
+
+			key := types.NamespacedName{Name: crd.Name, Namespace: defaultNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, key, &crd)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("verifying status")
+			Eventually(func(g Gomega) {
+
+				g.Expect(k8sClient.Get(ctx, key, &crd)).Should(Succeed())
+
+				g.Expect(common.IsConditionPresentAndEqualIgnoringMessage(crd.Status.Conditions, metav1.Condition{
+					Type:   brokerv1beta1.DeployedConditionType,
+					Status: metav1.ConditionFalse,
+					Reason: brokerv1beta1.DeployedConditionValidationFailedReason,
+				})).Should(BeTrue())
+
+				condition := meta.FindStatusCondition(crd.Status.Conditions, brokerv1beta1.ValidConditionType)
+				g.Expect(condition).NotTo(BeNil())
+
+				By("checking message" + fmt.Sprintf("%v", condition.Message))
+				g.Expect(condition.Message).To(ContainSubstring("Size"))
+			}, timeout, interval).Should(Succeed())
 
 			CleanResource(&crd, crd.Name, defaultNamespace)
 		})
@@ -10008,6 +10173,136 @@ var _ = Describe("artemis controller", func() {
 			Expect(k8sClient.Delete(ctx, &crd)).To(Succeed())
 		})
 
+		It("complex extraSecret with JSON broker properties with quote and -bp suffix", func() {
+
+			ctx := context.Background()
+			crd := generateArtemisSpec(defaultNamespace)
+
+			loggingData := make(map[string]string)
+			loggingData[LoggingConfigKey] = `appender.stdout.name = STDOUT
+		appender.stdout.type = Console
+		rootLogger = info, STDOUT
+		logger.activemq.name=org.apache.activemq.artemis.core.config.impl.ConfigurationImpl
+        logger.activemq.level=TRACE`
+
+			loggingConfigMap := configmaps.MakeConfigMap(defaultNamespace, "config-impl-logging-config", loggingData)
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Create(ctx, loggingConfigMap, &client.CreateOptions{})).Should(Succeed())
+			}, timeout, interval).Should(Succeed())
+
+			secret := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Secret",
+					APIVersion: "k8s.io.api.core.v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "y-bp",
+					Namespace: crd.ObjectMeta.Namespace,
+				},
+			}
+
+			secret.Data = map[string][]byte{
+				"config.json": []byte(`{}`),
+			}
+
+			crd.Spec.DeploymentPlan.ExtraMounts.Secrets = []string{secret.Name}
+			//loggingConfigMap
+			crd.Spec.DeploymentPlan.ExtraMounts.ConfigMaps = []string{loggingConfigMap.Name}
+
+			By("Deploying the -bp secret " + secret.ObjectMeta.Name)
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Deploying the CRD " + crd.ObjectMeta.Name)
+			Expect(k8sClient.Create(ctx, &crd)).Should(Succeed())
+
+			if os.Getenv("USE_EXISTING_CLUSTER") == "true" {
+
+				createdCrd := &brokerv1beta1.ActiveMQArtemis{}
+				brokerKey := types.NamespacedName{Name: crd.Name, Namespace: crd.Namespace}
+
+				By("verify status ok")
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, brokerKey, createdCrd)).Should(Succeed())
+
+					condition := meta.FindStatusCondition(createdCrd.Status.Conditions, brokerv1beta1.ConfigAppliedConditionType)
+					g.Expect(condition).NotTo(BeNil())
+					g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+				jolokia := jolokia.GetJolokia(k8sClient, crd.Name+"-ss-0."+crd.Name+"-hdls-svc.test.svc.cluster.local", "8161", "/console/jolokia", "", "", "http")
+
+				var hasFileChecksum bool = false
+				By("verify file checksum")
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, brokerKey, createdCrd)).Should(Succeed())
+					// check for fileAlder32
+					data, err := jolokia.Read("org.apache.activemq.artemis:broker=\"amq-broker\"/Status")
+
+					if verbose {
+						fmt.Printf("\nStatus ERROR: %v : %v\n", data, err)
+					}
+					g.Expect(err).To(BeNil())
+					hasFileChecksum = strings.Contains(data.Value, "fileAlder32")
+				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+				if hasFileChecksum {
+
+					By("Update json config with quote value")
+					createdSecret := corev1.Secret{}
+					Eventually(func(g Gomega) {
+
+						g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: secret.Name, Namespace: secret.Namespace}, &createdSecret)).To(Succeed())
+
+						createdSecret.Data["config.json"] = []byte(`{
+						"key.surround": "$$",
+						"addressSettings": {
+						  "a": {
+							"maxDeliveryAttempts": 0
+						  },
+						  "$$e.\"\"e$$": {
+							"maxDeliveryAttempts": 1
+						  },
+						  "b.b": {
+							"maxDeliveryAttempts": 2
+						  }
+						}
+					  }`)
+						g.Expect(k8sClient.Update(ctx, &createdSecret)).To(Succeed())
+
+					}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+					By("verify status ok")
+					Eventually(func(g Gomega) {
+						g.Expect(k8sClient.Get(ctx, brokerKey, createdCrd)).Should(Succeed())
+
+						condition := meta.FindStatusCondition(createdCrd.Status.Conditions, brokerv1beta1.ConfigAppliedConditionType)
+						g.Expect(condition).NotTo(BeNil())
+
+						g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+
+						By("check applied address settings via jolokia")
+						for index, addr := range []string{"a", `e.\"\"e`, "b.b"} {
+							data, err := jolokia.Exec("", `{ "type":"EXEC","mbean":"org.apache.activemq.artemis:broker=\"amq-broker\"","operation":"getAddressSettingsAsJSON(java.lang.String)","arguments":["`+addr+`"] }`)
+
+							if verbose {
+								fmt.Printf("\nSettings ERROR: %s : %v\n", addr, err)
+							}
+							g.Expect(err).To(BeNil())
+							if verbose {
+								fmt.Printf("\nSettings: %s : %v\n", addr, data.Value)
+							}
+							g.Expect(data.Value).Should(ContainSubstring(`"maxDeliveryAttempts":`+strconv.Itoa(index)), data.Value)
+						}
+
+					}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+				}
+			}
+
+			Expect(k8sClient.Delete(ctx, loggingConfigMap)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &crd)).To(Succeed())
+		})
+
 		It("-bp suffix secret broker-n support", Label("broker-n-bp-secret"), func() {
 
 			ctx := context.Background()
@@ -10050,7 +10345,7 @@ var _ = Describe("artemis controller", func() {
 				By("checking pod 0 status that has properties applied")
 				podWithOrdinal0 := namer.CrToSS(crd.Name) + "-0"
 
-				curlUrl := "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=\"amq-broker\"/Status"
+				curlUrl := "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=%22amq-broker%22/Status"
 				curlCmd := []string{"curl", "-s", "-H", "Origin: http://localhost:8161", "-u", "user:password", curlUrl}
 				Eventually(func(g Gomega) {
 					result, err := RunCommandInPod(podWithOrdinal0, crd.Name+"-container", curlCmd)
@@ -10061,7 +10356,7 @@ var _ = Describe("artemis controller", func() {
 					g.Expect(*result).NotTo(ContainSubstring("broker-1.globalMem.properties"))
 				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 
-				curlUrl = "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=\"amq-broker\"/GlobalMaxSize"
+				curlUrl = "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=%22amq-broker%22/GlobalMaxSize"
 				curlCmd = []string{"curl", "-s", "-H", "Origin: http://localhost:8161", "-u", "user:password", curlUrl}
 				Eventually(func(g Gomega) {
 					result, err := RunCommandInPod(podWithOrdinal0, crd.Name+"-container", curlCmd)
@@ -10073,7 +10368,7 @@ var _ = Describe("artemis controller", func() {
 				By("checking pod 1 status that has properties applied")
 				podWithOrdinal1 := namer.CrToSS(crd.Name) + "-1"
 
-				curlUrl = "http://" + podWithOrdinal1 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=\"amq-broker\"/Status"
+				curlUrl = "http://" + podWithOrdinal1 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=%22amq-broker%22/Status"
 				curlCmd = []string{"curl", "-s", "-H", "Origin: http://localhost:8161", "-u", "user:password", curlUrl}
 				Eventually(func(g Gomega) {
 					result, err := RunCommandInPod(podWithOrdinal1, crd.Name+"-container", curlCmd)
@@ -10084,7 +10379,7 @@ var _ = Describe("artemis controller", func() {
 					g.Expect(*result).NotTo(ContainSubstring("broker-0.globalMem.properties"))
 				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 
-				curlUrl = "http://" + podWithOrdinal1 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=\"amq-broker\"/GlobalMaxSize"
+				curlUrl = "http://" + podWithOrdinal1 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=%22amq-broker%22/GlobalMaxSize"
 				curlCmd = []string{"curl", "-s", "-H", "Origin: http://localhost:8161", "-u", "user:password", curlUrl}
 				Eventually(func(g Gomega) {
 					result, err := RunCommandInPod(podWithOrdinal1, crd.Name+"-container", curlCmd)
@@ -10155,7 +10450,7 @@ var _ = Describe("artemis controller", func() {
 				By("checking pod 0 status that has properties applied")
 				podWithOrdinal0 := namer.CrToSS(crd.Name) + "-0"
 
-				curlUrl := "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=\"amq-broker\"/Status"
+				curlUrl := "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=%22amq-broker%22/Status"
 				curlCmd := []string{"curl", "-s", "-H", "Origin: http://localhost:8161", "-u", "user:password", curlUrl}
 				Eventually(func(g Gomega) {
 					result, err := RunCommandInPod(podWithOrdinal0, crd.Name+"-container", curlCmd)
@@ -10166,7 +10461,7 @@ var _ = Describe("artemis controller", func() {
 					g.Expect(*result).NotTo(ContainSubstring("broker-1.globalMem.json"))
 				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 
-				curlUrl = "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=\"amq-broker\"/GlobalMaxSize"
+				curlUrl = "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=%22amq-broker%22/GlobalMaxSize"
 				curlCmd = []string{"curl", "-s", "-H", "Origin: http://localhost:8161", "-u", "user:password", curlUrl}
 				Eventually(func(g Gomega) {
 					result, err := RunCommandInPod(podWithOrdinal0, crd.Name+"-container", curlCmd)
@@ -10178,7 +10473,7 @@ var _ = Describe("artemis controller", func() {
 				By("checking pod 1 status that has properties applied")
 				podWithOrdinal1 := namer.CrToSS(crd.Name) + "-1"
 
-				curlUrl = "http://" + podWithOrdinal1 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=\"amq-broker\"/Status"
+				curlUrl = "http://" + podWithOrdinal1 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=%22amq-broker%22/Status"
 				curlCmd = []string{"curl", "-s", "-H", "Origin: http://localhost:8161", "-u", "user:password", curlUrl}
 				Eventually(func(g Gomega) {
 					result, err := RunCommandInPod(podWithOrdinal1, crd.Name+"-container", curlCmd)
@@ -10189,7 +10484,7 @@ var _ = Describe("artemis controller", func() {
 					g.Expect(*result).NotTo(ContainSubstring("broker-0.globalMem.json"))
 				}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 
-				curlUrl = "http://" + podWithOrdinal1 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=\"amq-broker\"/GlobalMaxSize"
+				curlUrl = "http://" + podWithOrdinal1 + ":8161/console/jolokia/read/org.apache.activemq.artemis:broker=%22amq-broker%22/GlobalMaxSize"
 				curlCmd = []string{"curl", "-s", "-H", "Origin: http://localhost:8161", "-u", "user:password", curlUrl}
 				Eventually(func(g Gomega) {
 					result, err := RunCommandInPod(podWithOrdinal1, crd.Name+"-container", curlCmd)

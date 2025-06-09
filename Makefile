@@ -3,17 +3,17 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 1.2.8
+VERSION ?= 2.0.2
 
 KUBE_CLI=kubectl
-OPERATOR_VERSION := 1.2.8
+OPERATOR_VERSION := 2.0.2
 OPERATOR_ACCOUNT_NAME := activemq-artemis-operator
 OPERATOR_CLUSTER_ROLE_NAME := operator-role
-OPERATOR_IMAGE_REPO := quay.io/artemiscloud/activemq-artemis-operator
+OPERATOR_IMAGE_REPO := quay.io/arkmq-org/activemq-artemis-operator
 OPERATOR_NAMESPACE := activemq-artemis-operator
 BUNDLE_PACKAGE := $(OPERATOR_NAMESPACE)
 BUNDLE_ANNOTATION_PACKAGE := $(BUNDLE_PACKAGE)
-GO_MODULE := github.com/artemiscloud/activemq-artemis-operator
+GO_MODULE := github.com/arkmq-org/activemq-artemis-operator
 OS := $(shell go env GOOS)
 ARCH := $(shell go env GOARCH)
 
@@ -54,8 +54,8 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# quay.io/artemiscloud/activemq-artemis-operator-bundle:$VERSION and quay.io/artemiscloud/activemq-artemis-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= quay.io/artemiscloud/activemq-artemis-operator
+# quay.io/arkmq-org/activemq-artemis-operator-bundle:$VERSION and quay.io/arkmq-org/activemq-artemis-operator-catalog:$VERSION.
+IMAGE_TAG_BASE ?= quay.io/arkmq-org/activemq-artemis-operator
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -117,24 +117,16 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen kustomize
-ifeq ($(ENABLE_WEBHOOKS),true)
+manifests: controller-gen
 ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 ## v2alpha3, v2alpha4 and v2alpha3 requires allowDangerousTypes=true because they use float32 type
-	cd config/manager && $(KUSTOMIZE) edit add resource webhook_secret.yaml 
 	$(CONTROLLER_GEN) rbac:roleName=$(OPERATOR_CLUSTER_ROLE_NAME) crd:allowDangerousTypes=true webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	find config -type f -exec sed -i.bak -e '/creationTimestamp:/d' {} \; -exec rm {}.bak \;
-else
-## Generate ClusterRole and CustomResourceDefinition objects.
-## v2alpha3, v2alpha4 and v2alpha3 requires allowDangerousTypes=true because they use float32 type
-	cd config/manager && $(KUSTOMIZE) edit remove resource webhook_secret.yaml 
-	$(CONTROLLER_GEN) rbac:roleName=$(OPERATOR_CLUSTER_ROLE_NAME) crd:allowDangerousTypes=true paths="./..." output:crd:artifacts:config=config/crd/bases
-	find config -type f -exec sed -i.bak -e '/creationTimestamp:/d' {} \; -exec rm {}.bak \;
-endif
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	sed -i "s~Version = \"${CURRENT_VERSION}\"~Version = \"${VERSION}\"~" version/version.go
+	sed -i "s~^LABEL version=.*~LABEL version=\"${VERSION}\"~g" Dockerfile
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -149,15 +141,15 @@ test test-v: TEST_VARS = KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8
 
 ## Run tests against minikube with local operator.
 test-mk test-mk-v: TEST_ARGS += -test.timeout=120m -ginkgo.label-filter='!do'
-test-mk test-mk-v: TEST_VARS = ENABLE_WEBHOOKS=false USE_EXISTING_CLUSTER=true RECONCILE_RESYNC_PERIOD=5s
+test-mk test-mk-v: TEST_VARS = USE_EXISTING_CLUSTER=true RECONCILE_RESYNC_PERIOD=5s
 
 ## Run tests against minikube with deployed operator(do)
 test-mk-do test-mk-do-v: TEST_ARGS += -test.timeout=60m -ginkgo.label-filter='do'
-test-mk-do test-mk-do-v: TEST_VARS = DEPLOY_OPERATOR=true ENABLE_WEBHOOKS=false USE_EXISTING_CLUSTER=true
+test-mk-do test-mk-do-v: TEST_VARS = DEPLOY_OPERATOR=true USE_EXISTING_CLUSTER=true
 
 ## Run tests against minikube with deployed operator(do) and exclude slow, useful for CI smoke
 test-mk-do-fast test-mk-do-fast-v: TEST_ARGS += -test.timeout=30m -ginkgo.label-filter='do && !slow'
-test-mk-do-fast test-mk-do-fast-v: TEST_VARS = DEPLOY_OPERATOR=true ENABLE_WEBHOOKS=false USE_EXISTING_CLUSTER=true
+test-mk-do-fast test-mk-do-fast-v: TEST_VARS = DEPLOY_OPERATOR=true USE_EXISTING_CLUSTER=true
 
 test-v test-mk-v test-mk-do-v test-mk-do-fast-v: TEST_ARGS += -v
 test-v test-mk test-mk-v test-mk-do test-mk-do-v test-mk-do-fast test-mk-do-fast-v: TEST_ARGS += -ginkgo.poll-progress-after=150s -ginkgo.fail-fast -coverprofile cover-mk.out
@@ -255,7 +247,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.8.7
-CONTROLLER_TOOLS_VERSION ?= v0.11.2
+CONTROLLER_TOOLS_VERSION ?= v0.16.5
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -286,7 +278,9 @@ bundle: manifests operator-sdk kustomize ## Generate bundle manifests and metada
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle --package $(BUNDLE_PACKAGE) $(BUNDLE_GEN_FLAGS)
 	sed -i.bak '/creationTimestamp:/d' ./bundle/manifests/*.yaml && rm ./bundle/manifests/*.bak
-	sed -i.bak '/createdAt/d' ./bundle/manifests/*.yaml && rm ./bundle/manifests/*.bak
+	sed -i.bak "s/createdAt:.*/`grep -oP 'createdAt:.*' config/manifests/bases/$(BUNDLE_PACKAGE).clusterserviceversion.yaml`/" ./bundle/manifests/*.yaml && rm ./bundle/manifests/*.bak
+	sed -i.bak 's|containerImage: .*|containerImage: '${IMG}'|' ./bundle/manifests/*.yaml && rm ./bundle/manifests/*.bak
+	sed -i "s~version:.*~version: \"${VERSION}\"~" config/metadata/$(BUNDLE_PACKAGE).annotations.yaml
 	sed 's/annotations://' config/metadata/$(BUNDLE_PACKAGE).annotations.yaml >> bundle/metadata/annotations.yaml
 	sed -e 's/annotations://' -e 's/  /LABEL /g' -e 's/: /=/g'  config/metadata/$(BUNDLE_PACKAGE).annotations.yaml >> bundle.Dockerfile
 	sed -i.bak 's/operators.operatorframework.io.bundle.package.v1:.*/operators.operatorframework.io.bundle.package.v1: $(BUNDLE_ANNOTATION_PACKAGE)/' bundle/metadata/annotations.yaml && rm bundle/metadata/annotations.yaml.bak

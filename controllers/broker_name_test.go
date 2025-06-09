@@ -20,12 +20,8 @@ package controllers
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	cmv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -42,7 +38,7 @@ import (
 	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
 )
 
-var _ = Describe("minimal", func() {
+var _ = Describe("broker name", func() {
 
 	var installedCertManager bool = false
 
@@ -100,9 +96,53 @@ var _ = Describe("minimal", func() {
 		AfterEachSpec()
 	})
 
-	Context("restricted rbac", func() {
+	Context("set non default value", func() {
 
-		It("operator role access", func() {
+		It("non restricted", func() {
+
+			if os.Getenv("USE_EXISTING_CLUSTER") != "true" {
+				return
+			}
+
+			ctx := context.Background()
+
+			crd := brokerv1beta1.ActiveMQArtemis{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ActiveMQArtemis",
+					APIVersion: brokerv1beta1.GroupVersion.Identifier(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      NextSpecResourceName(),
+					Namespace: defaultNamespace,
+				},
+			}
+
+			crd.Spec.Env = []corev1.EnvVar{
+				{Name: "AMQ_NAME", Value: "joe"},
+			}
+
+			By("Deploying the CRD " + crd.ObjectMeta.Name)
+			Expect(k8sClient.Create(ctx, &crd)).Should(Succeed())
+
+			brokerKey := types.NamespacedName{Name: crd.Name, Namespace: crd.Namespace}
+			createdCrd := &brokerv1beta1.ActiveMQArtemis{}
+
+			By("Checking ready, operator can access broker status via jmx")
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, brokerKey, createdCrd)).Should(Succeed())
+
+				if verbose {
+					fmt.Printf("STATUS: %v\n\n", createdCrd.Status.Conditions)
+				}
+				g.Expect(meta.IsStatusConditionTrue(createdCrd.Status.Conditions, brokerv1beta1.ReadyConditionType)).Should(BeTrue())
+				g.Expect(meta.IsStatusConditionTrue(createdCrd.Status.Conditions, brokerv1beta1.ConfigAppliedConditionType)).Should(BeTrue())
+
+			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, createdCrd)).Should(Succeed())
+		})
+
+		It("restricted", func() {
 
 			if os.Getenv("USE_EXISTING_CLUSTER") != "true" {
 				return
@@ -145,14 +185,8 @@ var _ = Describe("minimal", func() {
 			})
 
 			crd.Spec.Restricted = common.NewTrue()
-
-			// how the jdk command line can be configured or modified
 			crd.Spec.Env = []corev1.EnvVar{
-				{Name: "JDK_JAVA_OPTIONS", Value: "-Djavax.net.debug=ssl -Djava.security.debug=logincontext"},
-				//{Name: "JAVA_ARGS_APPEND", Value: "-DordinalProp=${STATEFUL_SET_ORDINAL}"},
-			}
-			crd.Spec.BrokerProperties = []string{
-				"messageCounterSamplePeriod=500",
+				{Name: "AMQ_NAME", Value: "tom"},
 			}
 
 			By("Deploying the CRD " + crd.ObjectMeta.Name)
@@ -170,57 +204,6 @@ var _ = Describe("minimal", func() {
 				}
 				g.Expect(meta.IsStatusConditionTrue(createdCrd.Status.Conditions, brokerv1beta1.ReadyConditionType)).Should(BeTrue())
 				g.Expect(meta.IsStatusConditionTrue(createdCrd.Status.Conditions, brokerv1beta1.ConfigAppliedConditionType)).Should(BeTrue())
-
-			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
-
-			serverName := common.OrdinalFQDNS(crd.Name, defaultNamespace, 0)
-			By("setting up operator identity on http client")
-			httpClient := http.Client{
-				Transport: http.DefaultTransport,
-				// A timeout less than 3 seconds may cause connection issues when
-				// the server requires to change the chiper.
-				Timeout: time.Second * 3,
-			}
-
-			httpClientTransport := httpClient.Transport.(*http.Transport)
-			httpClientTransport.TLSClientConfig = &tls.Config{
-				ServerName:         serverName,
-				InsecureSkipVerify: false,
-			}
-			httpClientTransport.TLSClientConfig.GetClientCertificate =
-				func(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-					return common.GetOperatorClientCertificate(k8sClient, cri)
-				}
-
-			if rootCas, err := common.GetRootCAs(k8sClient); err == nil {
-				httpClientTransport.TLSClientConfig.RootCAs = rootCas
-			}
-
-			By("Checking metrics with mtls are visible")
-			Eventually(func(g Gomega) {
-
-				resp, err := httpClient.Get("https://" + serverName + ":8888/metrics")
-				if verbose {
-					fmt.Printf("Resp form metrics get resp: %v, error: %v\n", resp, err)
-				}
-				g.Expect(err).Should(Succeed())
-
-				defer resp.Body.Close()
-				body, err := io.ReadAll(resp.Body)
-				g.Expect(err).Should(Succeed())
-
-				lines := strings.Split(string(body), "\n")
-
-				var done = false
-				for _, line := range lines {
-					if verbose {
-						fmt.Printf("%s\n", line)
-					}
-					if strings.Contains(line, "artemis_total_pending_message_count") {
-						done = true
-					}
-				}
-				g.Expect(done).To(BeTrue())
 
 			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 

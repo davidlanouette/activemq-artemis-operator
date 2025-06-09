@@ -15,21 +15,22 @@ import (
 	"unicode"
 
 	"github.com/RHsyseng/operator-utils/pkg/resource/compare"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/containers"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/ingresses"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/persistentvolumeclaims"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/pods"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/routes"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/secrets"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/serviceports"
-	ss "github.com/artemiscloud/activemq-artemis-operator/pkg/resources/statefulsets"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/certutil"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/cr2jinja2"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/jolokia_client"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/namer"
-	"github.com/artemiscloud/activemq-artemis-operator/version"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/containers"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/ingresses"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/persistentvolumeclaims"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/pods"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/routes"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/secrets"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/serviceports"
+	ss "github.com/arkmq-org/activemq-artemis-operator/pkg/resources/statefulsets"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/certutil"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/cr2jinja2"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/jolokia_client"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/namer"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/random"
+	"github.com/arkmq-org/activemq-artemis-operator/version"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -45,9 +46,9 @@ import (
 
 	rtclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/environments"
-	svc "github.com/artemiscloud/activemq-artemis-operator/pkg/resources/services"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/volumes"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/environments"
+	svc "github.com/arkmq-org/activemq-artemis-operator/pkg/resources/services"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/volumes"
 
 	"reflect"
 
@@ -58,7 +59,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
 
 	"strconv"
 	"strings"
@@ -107,7 +108,7 @@ var configCmd = "/opt/amq/bin/launch.sh"
 
 // default ApplyRule for address-settings
 var defApplyRule string = "merge_all"
-var yacfgProfileVersion = version.YacfgProfileVersionFromFullVersion[version.LatestVersion]
+var yacfgProfileVersion = version.YacfgProfileVersionFromFullVersion[version.GetDefaultVersion()]
 
 type ActiveMQArtemisReconcilerImpl struct {
 	requestedResources map[reflect.Type]map[string]rtclient.Object
@@ -282,7 +283,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) ProcessStatefulSet(customResour
 	}
 
 	labels := namer.LabelBuilder.Labels()
-	headlessServiceDefinition = svc.NewHeadlessServiceForCR2(client, headlesServiceName, ssNamespacedName.Namespace, serviceports.GetDefaultPorts(isRestricted(customResource)), labels, headlessServiceDefinition)
+	headlessServiceDefinition = svc.NewHeadlessServiceForCR2(client, headlesServiceName, ssNamespacedName.Namespace, serviceports.GetDefaultPorts(common.IsRestricted(customResource)), labels, headlessServiceDefinition)
 	reconciler.trackDesired(headlessServiceDefinition)
 
 	if isClustered(customResource) {
@@ -303,7 +304,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) ProcessStatefulSet(customResour
 }
 
 func isClustered(customResource *brokerv1beta1.ActiveMQArtemis) bool {
-	if isRestricted(customResource) {
+	if common.IsRestricted(customResource) {
 		return false
 	}
 
@@ -315,7 +316,7 @@ func isClustered(customResource *brokerv1beta1.ActiveMQArtemis) bool {
 
 func (reconciler *ActiveMQArtemisReconcilerImpl) ProcessCredentials(customResource *brokerv1beta1.ActiveMQArtemis, namer common.Namers, client rtclient.Client, scheme *runtime.Scheme, currentStatefulSet *appsv1.StatefulSet) {
 
-	if isRestricted(customResource) {
+	if common.IsRestricted(customResource) {
 		return
 	}
 	reconciler.log.V(1).Info("ProcessCredentials")
@@ -338,7 +339,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) ProcessCredentials(customResour
 			adminUser.Value = amqUserEnvVar.Value
 		}
 		if adminUser.Value == "" {
-			adminUser.Value = environments.Defaults.AMQ_USER
+			adminUser.Value = random.GenerateRandomString(8)
 			adminUser.AutoGen = true
 		}
 	}
@@ -350,18 +351,18 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) ProcessCredentials(customResour
 			adminPassword.Value = amqPasswordEnvVar.Value
 		}
 		if adminPassword.Value == "" {
-			adminPassword.Value = environments.Defaults.AMQ_PASSWORD
+			adminPassword.Value = random.GenerateRandomString(8)
 			adminPassword.AutoGen = true
 		}
 	}
 	envVars["AMQ_PASSWORD"] = adminPassword
 
 	envVars["AMQ_CLUSTER_USER"] = ValueInfo{
-		Value:   environments.GLOBAL_AMQ_CLUSTER_USER,
+		Value:   random.GenerateRandomString(8),
 		AutoGen: true,
 	}
 	envVars["AMQ_CLUSTER_PASSWORD"] = ValueInfo{
-		Value:   environments.GLOBAL_AMQ_CLUSTER_PASSWORD,
+		Value:   random.GenerateRandomString(8),
 		AutoGen: true,
 	}
 
@@ -416,7 +417,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) applyPodDisruptionBudget(custom
 
 func (reconciler *ActiveMQArtemisReconcilerImpl) ProcessAcceptorsAndConnectors(customResource *brokerv1beta1.ActiveMQArtemis, namer common.Namers, client rtclient.Client, scheme *runtime.Scheme, currentStatefulSet *appsv1.StatefulSet) error {
 
-	if isRestricted(customResource) {
+	if common.IsRestricted(customResource) {
 		return nil
 	}
 
@@ -452,7 +453,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) ProcessAcceptorsAndConnectors(c
 func (reconciler *ActiveMQArtemisReconcilerImpl) ProcessConsole(customResource *brokerv1beta1.ActiveMQArtemis, namer common.Namers, client rtclient.Client, scheme *runtime.Scheme, currentStatefulSet *appsv1.StatefulSet) error {
 
 	reconciler.configureConsoleExposure(customResource, namer, client)
-	if !customResource.Spec.Console.SSLEnabled || isRestricted(customResource) {
+	if !customResource.Spec.Console.SSLEnabled || common.IsRestricted(customResource) {
 		return nil
 	}
 
@@ -510,8 +511,6 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) syncMessageMigration(customReso
 	ssNames := make(map[string]string)
 	ssNames["CRNAMESPACE"] = customResource.Namespace
 	ssNames["CRNAME"] = customResource.Name
-	ssNames["CLUSTERUSER"] = environments.GLOBAL_AMQ_CLUSTER_USER
-	ssNames["CLUSTERPASS"] = environments.GLOBAL_AMQ_CLUSTER_PASSWORD
 	ssNames["HEADLESSSVCNAMEVALUE"] = namer.SvcHeadlessNameBuilder.Name()
 	ssNames["PINGSVCNAMEVALUE"] = namer.SvcPingNameBuilder.Name()
 	ssNames["SERVICE_ACCOUNT"] = os.Getenv("SERVICE_ACCOUNT")
@@ -1737,7 +1736,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) MakeVolumes(customResource *bro
 	if customResource.Spec.DeploymentPlan.PersistenceEnabled {
 		basicCRVolume := volumes.MakePersistentVolume(customResource.Name)
 		volumeDefinitions = append(volumeDefinitions, basicCRVolume...)
-	} else if isRestricted(customResource) {
+	} else if common.IsRestricted(customResource) {
 		emptyDirData := volumes.MakeEmptyDirVolumeFor(customResource.Name)
 		volumeDefinitions = append(volumeDefinitions, emptyDirData)
 	}
@@ -1782,7 +1781,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) MakeVolumes(customResource *bro
 		}
 	}
 
-	if !isRestricted(customResource) && customResource.Spec.Console.SSLEnabled {
+	if !common.IsRestricted(customResource) && customResource.Spec.Console.SSLEnabled {
 		reconciler.log.V(1).Info("Make volumes for ssl console exposure on k8s")
 		secretName := namer.SecretsConsoleNameBuilder.Name()
 		addNewVolumes(secretVolumes, &volumeDefinitions, &secretName)
@@ -1805,7 +1804,7 @@ func addNewVolumeMounts(existingNames map[string]string, existing *[]corev1.Volu
 func (reconciler *ActiveMQArtemisReconcilerImpl) MakeVolumeMounts(customResource *brokerv1beta1.ActiveMQArtemis, namer common.Namers) ([]corev1.VolumeMount, error) {
 
 	volumeMounts := []corev1.VolumeMount{}
-	if customResource.Spec.DeploymentPlan.PersistenceEnabled || isRestricted(customResource) {
+	if customResource.Spec.DeploymentPlan.PersistenceEnabled || common.IsRestricted(customResource) {
 		persistentCRVlMnt := volumes.MakePersistentVolumeMount(customResource.Name, getDataMountPath(customResource, namer))
 		volumeMounts = append(volumeMounts, persistentCRVlMnt...)
 	}
@@ -1892,7 +1891,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) MakeVolumeMounts(customResource
 }
 
 func getDataMountPath(cr *brokerv1beta1.ActiveMQArtemis, namer common.Namers) string {
-	if isRestricted(cr) {
+	if common.IsRestricted(cr) {
 		return "/app"
 	}
 	return namer.GLOBAL_DATA_PATH
@@ -1928,6 +1927,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 	}
 
 	terminationGracePeriodSeconds := int64(60)
+	respectExistingJavaOpts := isExistingDeploymentWithJavaOpts(current) // check before we mutate
 
 	// custom labels provided in CR applied only to the pod template spec
 	// note: work with a clone of the default labels to not modify defaults
@@ -1973,11 +1973,14 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 	}
 
 	additionalSystemPropsForRestricted := []string{}
-	if isRestricted(customResource) {
+	if common.IsRestricted(customResource) {
 
 		mountPathRoot := secretPathBase + getPropertiesResourceNsName(customResource).Name
 		security_properties := newPropsWithHeader()
 		fmt.Fprintf(security_properties, "login.config.url.1=file:%s/login.config\n", mountPathRoot)
+		fmt.Fprintf(security_properties, "security.provider.13=de.dentrassi.crypto.pem.PemKeyStoreProvider\n")
+		fmt.Fprintf(security_properties, "fips.provider.8=de.dentrassi.crypto.pem.PemKeyStoreProvider\n")
+
 		brokerPropertiesMapData["_security.config"] = security_properties.String()
 
 		additionalSystemPropsForRestricted = append(additionalSystemPropsForRestricted, fmt.Sprintf("-Djava.security.properties=%s/_security.config", mountPathRoot))
@@ -1986,7 +1989,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 		fmt.Fprintln(login_config, "http_server_authenticator {")
 		fmt.Fprintln(login_config, "  org.apache.activemq.artemis.spi.core.security.jaas.TextFileCertificateLoginModule required")
 		fmt.Fprintln(login_config, "   reload=true")
-		fmt.Fprintln(login_config, "   debug=true")
+		fmt.Fprintln(login_config, "   debug=false")
 		fmt.Fprintln(login_config, "   org.apache.activemq.jaas.textfiledn.user=_cert-users")
 		fmt.Fprintln(login_config, "   org.apache.activemq.jaas.textfiledn.role=_cert-roles")
 		fmt.Fprintf(login_config, "   baseDir=\"%v\"\n", mountPathRoot)
@@ -2032,12 +2035,14 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 
 		cert_roles := newPropsWithHeader()
 		fmt.Fprintln(cert_roles, "status=operator,probe")
+		fmt.Fprintln(cert_roles, "metrics=operator")
 		fmt.Fprintln(cert_roles, "hawtio=hawtio")
 		brokerPropertiesMapData["_cert-roles"] = cert_roles.String()
 
 		foundationalProps := newPropsWithHeader()
-		fmt.Fprintln(foundationalProps, "name=amq-broker")
+		fmt.Fprintf(foundationalProps, "name=%s\n", environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name))
 		fmt.Fprintln(foundationalProps, "criticalAnalyzer=false")
+		fmt.Fprintln(foundationalProps, "messageCounterEnabled=true")
 		fmt.Fprintln(foundationalProps, "journalDirectory=/app/data")
 		fmt.Fprintln(foundationalProps, "bindingsDirectory=/app/data/bindings")
 		fmt.Fprintln(foundationalProps, "largeMessagesDirectory=/app/data/largemessages")
@@ -2046,7 +2051,15 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 		brokerPropertiesMapData["aa_restricted.properties"] = foundationalProps.String()
 
 		rbac := newPropsWithHeader()
+		// operator status check
 		fmt.Fprintln(rbac, "securityRoles.\"mops.broker.getStatus\".status.view=true")
+
+		// jmx_exporter metrics perms
+		fmt.Fprintln(rbac, "securityRoles.\"mops.mbeanserver.queryMBeans\".metrics.view=true")
+		fmt.Fprintln(rbac, "securityRoles.\"mops.broker\".metrics.view=true") // for query remove filter
+		fmt.Fprintln(rbac, "securityRoles.\"mops.broker.getTotalMessageCount\".metrics.view=true")
+		fmt.Fprintln(rbac, "securityRoles.\"mops.broker.getTotalMessagesAcknowledged\".metrics.view=true")
+		fmt.Fprintln(rbac, "securityRoles.\"mops.broker.getTotalMessagesAdded\".metrics.view=true")
 
 		brokerPropertiesMapData["aa_rbac.properties"] = rbac.String()
 
@@ -2069,14 +2082,65 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 
 		brokerPropertiesMapData["_jolokia.config"] = jolokia_config.String()
 
-		// adapt jolokia authentication
+		pem_cfg := newPropsWithHeader()
+
+		fmt.Fprintf(pem_cfg, "alias=alias\n")
+		fmt.Fprintf(pem_cfg, "source.cert=%s%s/tls.crt\n", secretPathBase, operandCertSecretName)
+		fmt.Fprintf(pem_cfg, "source.key=%s%s/tls.key\n", secretPathBase, operandCertSecretName)
+		brokerPropertiesMapData["_cert.pemcfg"] = pem_cfg.String()
+
+		prometheus_config := newPropsWithHeader() // yaml
+		fmt.Fprintf(prometheus_config, "httpServer:\n")
+		fmt.Fprintf(prometheus_config, "  authentication:\n")
+		fmt.Fprintf(prometheus_config, "    plugin:\n")
+		fmt.Fprintf(prometheus_config, "      class: org.apache.activemq.artemis.spi.core.security.jaas.HttpServerAuthenticator\n")
+		fmt.Fprintf(prometheus_config, "      subjectAttributeName: org.jolokia.jaasSubject\n") // match -DhttpServerAuthenticator.requestSubjectAttribute
+		fmt.Fprintf(prometheus_config, "  ssl:\n")
+		fmt.Fprintf(prometheus_config, "    mutualTLS: true\n")
+		fmt.Fprintf(prometheus_config, "    keyStore:\n")
+		fmt.Fprintf(prometheus_config, "      filename: %s/_cert.pemcfg\n", mountPathRoot)
+		fmt.Fprintf(prometheus_config, "      type: PEMCFG\n")
+		fmt.Fprintf(prometheus_config, "    trustStore:\n")
+		fmt.Fprintf(prometheus_config, "      filename: %s%s/%s\n", secretPathBase, caSecret, caSecretKey)
+		fmt.Fprintf(prometheus_config, "      type: PEMCA\n")
+		fmt.Fprintf(prometheus_config, "    certificate:\n")
+		fmt.Fprintf(prometheus_config, "      alias: alias\n")
+		// the collector/scraper config
+		fmt.Fprintf(prometheus_config, "lowercaseOutputName: true\n")
+		fmt.Fprintf(prometheus_config, "lowercaseOutputLabelNames: true\n")
+		fmt.Fprintf(prometheus_config, "includeObjectNames: [org.apache.activemq.artemis:broker=\"%s\"]\n", environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name))
+		fmt.Fprintf(prometheus_config, "includeObjectNameAttributes:\n")
+		fmt.Fprintf(prometheus_config, "  'org.apache.activemq.artemis:broker=\"%s\"':\n", environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name))
+		fmt.Fprintf(prometheus_config, "    - \"TotalMessageCount\"\n")
+		fmt.Fprintf(prometheus_config, "    - \"TotalMessagesAdded\"\n")
+		fmt.Fprintf(prometheus_config, "    - \"TotalMessagesAcknowledged\"\n")
+		fmt.Fprintf(prometheus_config, "rules:\n")
+		fmt.Fprintf(prometheus_config, "  - pattern: 'org.apache.activemq.artemis<broker=\"%s\"><>TotalMessageCount'\n", environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name))
+		fmt.Fprintf(prometheus_config, "    help: Number of pending messages\n")
+		fmt.Fprintf(prometheus_config, "    name: artemis_total_pending_message_count\n")
+		fmt.Fprintf(prometheus_config, "    type: GAUGE\n")
+		fmt.Fprintf(prometheus_config, "  - pattern: 'org.apache.activemq.artemis<broker=\"%s\"><>TotalMessagesAcknowledged'\n", environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name))
+		fmt.Fprintf(prometheus_config, "    help: Number of messages consumed since start\n")
+		fmt.Fprintf(prometheus_config, "    name: artemis_total_consumed_message_count\n")
+		fmt.Fprintf(prometheus_config, "    type: COUNTER\n")
+		fmt.Fprintf(prometheus_config, "  - pattern: 'org.apache.activemq.artemis<broker=\"%s\"><>TotalMessagesAdded'\n", environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name))
+		fmt.Fprintf(prometheus_config, "    help: Number of messages produced since start\n")
+		fmt.Fprintf(prometheus_config, "    name: artemis_total_produced_message_count\n")
+		fmt.Fprintf(prometheus_config, "    type: COUNTER\n")
+
+		brokerPropertiesMapData["_prometheus_exporter.yaml"] = prometheus_config.String()
+
+		// adapt jolokia and prometheus authentication
 		additionalSystemPropsForRestricted = append(additionalSystemPropsForRestricted, "-DhttpServerAuthenticator.requestSubjectAttribute=org.jolokia.jaasSubject")
 
 		// install mbean server guard
 		additionalSystemPropsForRestricted = append(additionalSystemPropsForRestricted, "-Dlog4j2.disableJmx=true -Djavax.management.builder.initial=org.apache.activemq.artemis.core.server.management.ArtemisRbacMBeanServerBuilder")
 
 		// install jolokia agent
-		additionalSystemPropsForRestricted = append(additionalSystemPropsForRestricted, fmt.Sprintf("-javaagent:/opt/jolokia/javaagent.jar=host=$HOSTNAME,config=%s/_jolokia.config", mountPathRoot))
+		additionalSystemPropsForRestricted = append(additionalSystemPropsForRestricted, fmt.Sprintf("-javaagent:/opt/agents/jolokia.jar=host=$HOSTNAME,config=%s/_jolokia.config", mountPathRoot))
+
+		// install prometheus agent
+		additionalSystemPropsForRestricted = append(additionalSystemPropsForRestricted, fmt.Sprintf("-javaagent:/opt/agents/prometheus.jar=$HOSTNAME:8888:%s/_prometheus_exporter.yaml", mountPathRoot))
 
 		// non boot jar isolation classpath
 		additionalSystemPropsForRestricted = append(additionalSystemPropsForRestricted, "-classpath /opt/amq/lib/*:/opt/amq/lib/extra/*")
@@ -2095,7 +2159,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 							"/bin/bash",
 							"-c",
 							// use curl with mtls as the broker-cert to pull the status to find start state using dns
-							fmt.Sprintf(`export STATEFUL_SET_ORDINAL=${HOSTNAME##*-};curl --cacert %s%s/%s --cert %s%s/tls.crt --key %s%s/tls.key  https://%s:8778/jolokia/read/org.apache.activemq.artemis:broker=%%22amq-broker%%22/Status | grep -w -P "(START|STOPP)(ED|ING)"`, secretPathBase, caSecret, caSecretKey, secretPathBase, operandCertSecretName, secretPathBase, operandCertSecretName, common.OrdinalStringFQDNS(customResource.Name, customResource.Namespace, "$STATEFUL_SET_ORDINAL")),
+							fmt.Sprintf(`export STATEFUL_SET_ORDINAL=${HOSTNAME##*-};curl --cacert %s%s/%s --cert %s%s/tls.crt --key %s%s/tls.key  https://%s:8778/jolokia/read/org.apache.activemq.artemis:broker=%%22%s%%22/Status | grep -w -P "(START|STOPP)(ED|ING)"`, secretPathBase, caSecret, caSecretKey, secretPathBase, operandCertSecretName, secretPathBase, operandCertSecretName, common.OrdinalStringFQDNS(customResource.Name, customResource.Namespace, "$STATEFUL_SET_ORDINAL"), environments.ResolveBrokerNameFromEnvs(customResource.Spec.Env, customResource.Name)),
 						},
 					},
 				},
@@ -2128,7 +2192,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 	}
 
 	container.StartupProbe = reconciler.configureStartupProbe(container, customResource.Spec.DeploymentPlan.StartupProbe)
-	if !isRestricted(customResource) {
+	if !common.IsRestricted(customResource) {
 		container.LivenessProbe = reconciler.configureLivenessProbe(container, customResource.Spec.DeploymentPlan.LivenessProbe)
 	}
 	container.ReadinessProbe = reconciler.configureReadinessProbe(container, customResource.Spec.DeploymentPlan.ReadinessProbe)
@@ -2189,7 +2253,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 			Value: fmt.Sprintf("-Dlog4j2.configurationFile=%v", loggingConfigPath),
 		}
 		environments.CreateOrAppend(podSpec.Containers, &loggerOpts)
-	} else if isRestricted(customResource) {
+	} else if common.IsRestricted(customResource) {
 		// modify log4j2 default of ERROR
 		loggerOpts := corev1.EnvVar{
 			Name:  getLoginConfigEnvVarName(customResource),
@@ -2201,7 +2265,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 	// add TopologySpreadConstraints config
 	podSpec.TopologySpreadConstraints = customResource.Spec.DeploymentPlan.TopologySpreadConstraints
 
-	if !isRestricted(customResource) {
+	if !common.IsRestricted(customResource) {
 		//add empty-dir volume and volumeMounts to main container
 		volumeForCfg := volumes.MakeEmptyDirVolumeFor(cfgVolumeName)
 		podSpec.Volumes = append(podSpec.Volumes, volumeForCfg)
@@ -2323,7 +2387,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 
 	// only use init container JAVA_OPTS on existing deployments and migrate to JDK_JAVA_OPTIONS for independence
 	// from init containers and broker run scripts
-	if environments.Retrieve(podSpec.InitContainers, javaOptsEnvVarName) != nil {
+	if respectExistingJavaOpts {
 		// this depends on init container passing --java-opts to artemis create via launch.sh *and* it
 		// not getting munged on the way. We CreateOrAppend to any value from spec.Env
 		javaOpts := corev1.EnvVar{
@@ -2406,7 +2470,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 
 	pts.Spec = *podSpec
 
-	if isRestricted(customResource) {
+	if common.IsRestricted(customResource) {
 		pts.Spec.InitContainers = nil
 
 		// restricted env
@@ -2437,6 +2501,10 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) PodTemplateSpecForCR(customReso
 	return pts, nil
 }
 
+func isExistingDeploymentWithJavaOpts(current *corev1.PodTemplateSpec) bool {
+	return current != nil && environments.Retrieve(current.Spec.InitContainers, javaOptsEnvVarName) != nil
+}
+
 // support ${STATEFUL_SET_ORDINAL} replacement in JDK options from CR env if necessary
 func generateReEvalOrdinaEnvReplacement(envVars []corev1.EnvVar) (cmd string) {
 	cmd = ""
@@ -2453,7 +2521,7 @@ func supportsOrdinalReplacement(envVar corev1.EnvVar) bool {
 }
 
 func getJaasConfigEnvVarName(customResource *brokerv1beta1.ActiveMQArtemis) string {
-	if !isRestricted(customResource) {
+	if !common.IsRestricted(customResource) {
 		// legacy
 		return debugArgsEnvVarName
 	}
@@ -2462,16 +2530,12 @@ func getJaasConfigEnvVarName(customResource *brokerv1beta1.ActiveMQArtemis) stri
 }
 
 func getLoginConfigEnvVarName(customResource *brokerv1beta1.ActiveMQArtemis) string {
-	if !isRestricted(customResource) {
+	if !common.IsRestricted(customResource) {
 		// legacy
 		return javaArgsAppendEnvVarName
 	}
 
 	return jdkJavaOptionsEnvVarName
-}
-
-func isRestricted(customResource *brokerv1beta1.ActiveMQArtemis) bool {
-	return customResource.Spec.Restricted != nil && *customResource.Spec.Restricted
 }
 
 func newPropsWithHeader() *bytes.Buffer {
@@ -2574,7 +2638,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) configureLivenessProbe(containe
 			reconciler.log.V(1).Info("Using user provided Liveness Probe Handler" + probeFromCr.ProbeHandler.String())
 			livenessProbe.ProbeHandler = probeFromCr.ProbeHandler
 		}
-	} else if !isRestricted(reconciler.customResource) {
+	} else if !common.IsRestricted(reconciler.customResource) {
 
 		reconciler.log.V(1).Info("Creating Default Liveness Probe")
 
@@ -2631,7 +2695,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) configureReadinessProbe(contain
 		} else {
 			readinessProbe.ProbeHandler = probeFromCr.ProbeHandler
 		}
-	} else if isRestricted(reconciler.customResource) {
+	} else if common.IsRestricted(reconciler.customResource) {
 		// liveness probe is sufficient
 		readinessProbe = nil
 	} else {
@@ -2819,7 +2883,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) configureContianerSecurityConte
 		container.SecurityContext = containerSecurityContext
 	} else {
 		reconciler.log.V(2).Info("Incoming Container SecurityContext is nil, creating with default values")
-		readOnlyRootFilesystem := isRestricted(reconciler.customResource)
+		readOnlyRootFilesystem := common.IsRestricted(reconciler.customResource)
 		runAsNonRoot := true
 		allowPrivilegeEscalation := false
 		capabilities := corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
@@ -2859,7 +2923,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) configPodSecurity(podSpec *core
 		reconciler.log.V(2).Info("Pod serviceAccountName specified", "existing", podSpec.ServiceAccountName, "new", *podSecurity.ServiceAccountName)
 		podSpec.ServiceAccountName = *podSecurity.ServiceAccountName
 	} else {
-		autoMount := !isRestricted(reconciler.customResource)
+		autoMount := !common.IsRestricted(reconciler.customResource)
 		podSpec.AutomountServiceAccountToken = &autoMount
 	}
 	if podSecurity.RunAsUser != nil {
@@ -3101,8 +3165,8 @@ func MakeEnvVarArrayForCR(customResource *brokerv1beta1.ActiveMQArtemis, namer c
 	envVarArrayForMetricsPlugin := environments.AddEnvVarForMetricsPlugin(metricsPluginEnabled)
 	envVar = append(envVar, envVarArrayForMetricsPlugin...)
 
-	// appending any Env from CR, to allow potential override
-	envVar = append(envVar, customResource.Spec.Env...)
+	// Env from CR will override
+	envVar = environments.ReplaceOrAppend(envVar, customResource.Spec.Env...)
 
 	return envVar
 }
@@ -3130,6 +3194,7 @@ type brokerConfigStatus struct {
 
 type propertiesStatus struct {
 	Alder32     string       `json:"alder32"`
+	FileAlder32 string       `json:"fileAlder32,omitempty"`
 	ReloadTime  string       `json:"reloadTime"`
 	ApplyErrors []applyError `json:"errors"`
 }
@@ -3251,7 +3316,8 @@ type projection struct {
 }
 
 type propertyFile struct {
-	Alder32 string
+	Alder32     string
+	FileAlder32 string
 }
 
 func AssertBrokersAvailable(cr *brokerv1beta1.ActiveMQArtemis, client rtclient.Client, scheme *runtime.Scheme) ArtemisError {
@@ -3261,7 +3327,7 @@ func AssertBrokersAvailable(cr *brokerv1beta1.ActiveMQArtemis, client rtclient.C
 	DeployedCondition := meta.FindStatusCondition(cr.Status.Conditions, brokerv1beta1.DeployedConditionType)
 	if DeployedCondition == nil || DeployedCondition.Status == metav1.ConditionFalse {
 		reqLogger.V(2).Info("There are no available brokers from DeployedCondition", "condition", DeployedCondition)
-		return NewUnknownJolokiaError(errors.New("no available brokers from deployed condition"))
+		return NewArtemisStatusError(errors.New("no available brokers from deployed condition"), false)
 	}
 	return nil
 }
@@ -3271,8 +3337,8 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) AssertBrokerPropertiesStatus(cr
 
 	secretProjection, err := getSecretProjection(getPropertiesResourceNsName(cr), client)
 	if err != nil {
-		reqLogger.V(2).Info("error retrieving config resources. requeing")
-		return NewUnknownJolokiaError(err)
+		reqLogger.V(2).Info("error retrieving config resources.")
+		return NewArtemisStatusError(err, false)
 	}
 
 	errorStatus := reconciler.checkProjectionStatus(cr, client, secretProjection, func(BrokerStatus *brokerStatus, FileName string) (propertiesStatus, bool) {
@@ -3285,8 +3351,8 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) AssertBrokerPropertiesStatus(cr
 			if strings.HasSuffix(extraSecretName, brokerPropsSuffix) {
 				secretProjection, err = getSecretProjection(types.NamespacedName{Name: extraSecretName, Namespace: cr.Namespace}, client)
 				if err != nil {
-					reqLogger.V(2).Info("error retrieving -bp extra mount resource. requeing")
-					return NewUnknownJolokiaError(err)
+					reqLogger.V(2).Info("error retrieving -bp extra mount resource.")
+					return NewArtemisStatusError(err, false)
 				}
 				errorStatus = reconciler.checkProjectionStatus(cr, client, secretProjection, func(BrokerStatus *brokerStatus, FileName string) (propertiesStatus, bool) {
 					current, present := BrokerStatus.BrokerConfigStatus.PropertiesStatus[FileName]
@@ -3310,8 +3376,8 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) AssertJaasPropertiesStatus(cr *
 
 	Projection, err := getConfigMappedJaasProperties(cr, client)
 	if err != nil {
-		reqLogger.V(2).Info("error retrieving config resources. requeing")
-		return NewUnknownJolokiaError(err)
+		reqLogger.V(2).Info("error retrieving config resources.")
+		return NewArtemisStatusError(err, false)
 	}
 
 	statusError := reconciler.checkProjectionStatus(cr, client, Projection, func(BrokerStatus *brokerStatus, FileName string) (propertiesStatus, bool) {
@@ -3351,7 +3417,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) checkStatus(cr *brokerv1beta1.A
 	reqLogger := ctrl.Log.WithValues("ActiveMQArtemis Name", cr.Name)
 
 	var jks []*jolokia_client.JkInfo
-	if isRestricted(cr) {
+	if common.IsRestricted(cr) {
 		jks = jolokia_client.GetMinimalJolokiaAgents(cr, client)
 	} else {
 		resource := types.NamespacedName{
@@ -3375,8 +3441,8 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) checkStatus(cr *brokerv1beta1.A
 		currentJson, err := jk.Artemis.GetStatus()
 
 		if err != nil {
-			reqLogger.V(1).Info("unknown status reported from Jolokia.", "IP", jk.IP, "Ordinal", jk.Ordinal, "error", err)
-			return NewUnknownJolokiaError(err)
+			reqLogger.V(1).Info("error getting broker status with Jolokia", "IP", jk.IP, "Ordinal", jk.Ordinal, "error", err)
+			return NewArtemisStatusError(err, true)
 		}
 
 		reqLogger.V(2).Info("raw json status", "IP", jk.IP, "ordinal", jk.Ordinal, "status json", currentJson)
@@ -3384,7 +3450,7 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) checkStatus(cr *brokerv1beta1.A
 		brokerStatus, err := unmarshallStatus(currentJson)
 		if err != nil {
 			reqLogger.Error(err, "unable to unmarshall broker status", "json", currentJson)
-			return NewUnknownJolokiaError(err)
+			return NewArtemisStatusError(err, false)
 		}
 
 		reqLogger.V(2).Info("broker status", "ordinal", jk.Ordinal, "status", brokerStatus)
@@ -3424,14 +3490,21 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) checkProjectionStatus(cr *broke
 				continue
 			}
 
-			if current.Alder32 == "" {
+			if current.Alder32 == "" && current.FileAlder32 == "" {
 				err = errors.Errorf("out of sync on pod %s-%s, property file %s has an empty checksum",
 					namer.CrToSS(cr.Name), jk.Ordinal, name)
 				reqLogger.V(1).Info(err.Error(), "status", brokerStatus, "tracked", secretProjection)
 				return NewStatusOutOfSyncError(err)
 			}
 
-			if file.Alder32 != current.Alder32 {
+			if current.FileAlder32 != "" {
+				if file.FileAlder32 != current.FileAlder32 {
+					err = errors.Errorf("out of sync on pod %s-%s, mismatched file checksum on property file %s, expected: %s, current: %s. A delay can occur before a volume mount projection is refreshed.",
+						namer.CrToSS(cr.Name), jk.Ordinal, name, file.FileAlder32, current.FileAlder32)
+					reqLogger.V(1).Info(err.Error(), "status", brokerStatus, "tracked", secretProjection)
+					return NewStatusOutOfSyncError(err)
+				}
+			} else if file.Alder32 != current.Alder32 {
 				err = errors.Errorf("out of sync on pod %s-%s, mismatched checksum on property file %s, expected: %s, current: %s. A delay can occur before a volume mount projection is refreshed.",
 					namer.CrToSS(cr.Name), jk.Ordinal, name, file.Alder32, current.Alder32)
 				reqLogger.V(1).Info(err.Error(), "status", brokerStatus, "tracked", secretProjection)
@@ -3454,6 +3527,10 @@ func (reconciler *ActiveMQArtemisReconcilerImpl) checkProjectionStatus(cr *broke
 		}
 
 		if len(missingKeys) > 0 {
+			// sort missingKeys to generate a stable error message because it is used to update
+			// the config applied conditions and unstable messages cause unnecessaray resource updates
+			sort.Strings(missingKeys)
+
 			if strings.HasSuffix(secretProjection.Name, jaasConfigSuffix) {
 				err = errors.Errorf("out of sync on pod %s-%s, property files are not visible on the broker: %v. Reloadable JAAS LoginModule property files are only visible after the first login attempt that references them. If the property files are for a third party LoginModule or not reloadable, prefix the property file names with an underscore to exclude them from this condition",
 					namer.CrToSS(cr.Name), jk.Ordinal, missingKeys)
@@ -3510,7 +3587,7 @@ func getSecretProjection(secretName types.NamespacedName, client rtclient.Client
 	resource := corev1.Secret{}
 	err := client.Get(context.TODO(), secretName, &resource)
 	if err != nil {
-		return nil, NewUnknownJolokiaError(errors.Wrap(err, "unable to retrieve mutable properties secret"))
+		return nil, errors.Wrap(err, "unable to retrieve secret projection")
 	}
 	return newProjectionFromByteValues(resource.ObjectMeta, resource.Data), nil
 }
@@ -3530,10 +3607,16 @@ func newProjectionFromByteValues(resourceMeta metav1.ObjectMeta, configKeyValue 
 			if err := json.Unmarshal(data, &dataMap); err == nil {
 				keyValuePairs := []string{}
 				SortedKeyValuePairsFromMap(dataMap, &keyValuePairs)
-				projection.Files[prop_file_name] = propertyFile{Alder32: alder32StringValue(alder32Of(keyValuePairs))}
+				projection.Files[prop_file_name] = propertyFile{
+					Alder32:     alder32StringValue(alder32Of(keyValuePairs)),
+					FileAlder32: fmt.Sprintf("%d", adler32.Checksum(data)),
+				}
 			}
 		} else {
-			projection.Files[prop_file_name] = propertyFile{Alder32: alder32FromData(data)}
+			projection.Files[prop_file_name] = propertyFile{
+				Alder32:     alder32FromData(data),
+				FileAlder32: fmt.Sprintf("%d", adler32.Checksum(data)),
+			}
 		}
 	}
 	return &projection

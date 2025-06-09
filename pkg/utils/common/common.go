@@ -20,13 +20,13 @@ import (
 
 	"github.com/RHsyseng/operator-utils/pkg/olm"
 	"github.com/RHsyseng/operator-utils/pkg/resource/read"
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/secrets"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/channels"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/namer"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/selectors"
-	"github.com/artemiscloud/activemq-artemis-operator/version"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/secrets"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/channels"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/namer"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/selectors"
+	"github.com/arkmq-org/activemq-artemis-operator/version"
 	"github.com/blang/semver/v4"
 
 	routev1 "github.com/openshift/api/route/v1"
@@ -69,6 +69,8 @@ const (
 	DefaultOperatorCertSecretName = "activemq-artemis-manager-cert"
 	DefaultOperatorCASecretName   = "activemq-artemis-manager-ca"
 	DefaultOperandCertSecretName  = "broker-cert" // or can be prefixed with `cr.Name-`
+
+	BlockReconcileAnnotation = "arkmq.org/block-reconcile"
 )
 
 var lastStatusMap map[types.NamespacedName]olm.DeploymentStatus = make(map[types.NamespacedName]olm.DeploymentStatus)
@@ -373,6 +375,19 @@ func ProcessStatus(cr *brokerv1beta1.ActiveMQArtemis, client rtclient.Client, na
 	}
 }
 
+func UpdateBlockedStatus(cr *brokerv1beta1.ActiveMQArtemis, blocked bool) {
+	if blocked {
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:    brokerv1beta1.ReconcileBlockedType,
+			Status:  metav1.ConditionTrue,
+			Reason:  brokerv1beta1.ReconcileBlockedReason,
+			Message: "Reconcile blocked by presence of annotation " + BlockReconcileAnnotation,
+		})
+	} else {
+		meta.RemoveStatusCondition(&cr.Status.Conditions, brokerv1beta1.ReconcileBlockedType)
+	}
+}
+
 func updateVersionStatus(cr *brokerv1beta1.ActiveMQArtemis) {
 	cr.Status.Version.Image = ResolveImage(cr, BrokerImageKey)
 	cr.Status.Version.InitImage = ResolveImage(cr, InitImageKey)
@@ -649,8 +664,12 @@ func PodStartingStatusDigestMessage(podName string, status corev1.PodStatus) str
 	return buf.String()
 }
 
+func IsRestricted(customResource *brokerv1beta1.ActiveMQArtemis) bool {
+	return customResource.Spec.Restricted != nil && *customResource.Spec.Restricted
+}
+
 func GetDeploymentSize(cr *brokerv1beta1.ActiveMQArtemis) int32 {
-	if cr.Spec.DeploymentPlan.Size == nil {
+	if cr.Spec.DeploymentPlan.Size == nil || IsRestricted(cr) {
 		return DefaultDeploymentSize
 	}
 	return *cr.Spec.DeploymentPlan.Size

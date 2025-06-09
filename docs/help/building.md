@@ -1,7 +1,7 @@
 ---
 title: "Building"
-description: "Building ArtemisCloud.io"
-lead: "Building ArtemisCloud.io"
+description: "Building arkmq-org.io"
+lead: "Building arkmq-org.io"
 date: 2020-10-06T08:49:31+00:00
 lastmod: 2020-10-06T08:49:31+00:00
 draft: false
@@ -19,7 +19,7 @@ toc: true
 
 ### Go
 
-Download the Go version v1.21.11 from the [download page](https://go.dev/dl/) and install it following the [installation instructions](https://go.dev/doc/install).
+Download the Go version v1.22.7 from the [download page](https://go.dev/dl/) and install it following the [installation instructions](https://go.dev/doc/install).
 
 ### Operator SDK
 
@@ -32,7 +32,7 @@ Install Docker following the [installation instructions](https://docs.docker.com
 ## Get the code
 
 ```$xslt
-git clone https://github.com/artemiscloud/activemq-artemis-operator
+git clone https://github.com/arkmq-org/activemq-artemis-operator
 cd activemq-artemis-operator
 git checkout main
 ```

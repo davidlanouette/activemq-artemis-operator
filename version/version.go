@@ -1,13 +1,14 @@
 package version
 
 import (
+	"os"
 	"strings"
 
 	"github.com/blang/semver/v4"
 )
 
 var (
-	Version = "1.2.8"
+	Version = "2.0.2"
 
 	//Vars injected at build-time
 	BuildTimestamp = ""
@@ -15,18 +16,66 @@ var (
 
 const (
 	// LatestVersion product version supported
-	LatestVersion        = "2.38.0"
-	CompactLatestVersion = "2380"
+	LatestVersion        = "2.40.0"
+	CompactLatestVersion = "2400"
 
-	LatestKubeImage = "quay.io/artemiscloud/activemq-artemis-broker-kubernetes:artemis." + LatestVersion
-	LatestInitImage = "quay.io/artemiscloud/activemq-artemis-broker-init:artemis." + LatestVersion
+	LatestKubeImage = "quay.io/arkmq-org/activemq-artemis-broker-kubernetes:artemis." + LatestVersion
+	LatestInitImage = "quay.io/arkmq-org/activemq-artemis-broker-init:artemis." + LatestVersion
 )
+
+var (
+	defaultVersion        string
+	defaultCompactVersion string
+
+	defaultKubeImage string
+	defaultInitImage string
+)
+
+func GetDefaultVersion() string {
+	if defaultVersion == "" {
+		defaultVersion = os.Getenv("DEFAULT_BROKER_VERSION")
+		if defaultVersion == "" {
+			defaultVersion = LatestVersion
+		}
+	}
+	return defaultVersion
+}
+
+func GetDefaultCompactVersion() string {
+	if defaultCompactVersion == "" {
+		defaultCompactVersion = os.Getenv("DEFAULT_BROKER_COMPACT_VERSION")
+		if defaultCompactVersion == "" {
+			defaultCompactVersion = CompactLatestVersion
+		}
+	}
+	return defaultCompactVersion
+}
+
+func GetDefaultKubeImage() string {
+	if defaultKubeImage == "" {
+		defaultKubeImage = os.Getenv("DEFAULT_BROKER_KUBE_IMAGE")
+		if defaultKubeImage == "" {
+			defaultKubeImage = LatestKubeImage
+		}
+	}
+	return defaultKubeImage
+}
+
+func GetDefaultInitImage() string {
+	if defaultInitImage == "" {
+		defaultInitImage = os.Getenv("DEFAULT_BROKER_INIT_IMAGE")
+		if defaultInitImage == "" {
+			defaultInitImage = LatestInitImage
+		}
+	}
+	return defaultInitImage
+}
 
 func DefaultImageName(archSpecificRelatedImageEnvVarName string) string {
 	if strings.Contains(archSpecificRelatedImageEnvVarName, "_Init_") {
-		return LatestInitImage
+		return GetDefaultInitImage()
 	} else {
-		return LatestKubeImage
+		return GetDefaultKubeImage()
 	}
 }
 
@@ -50,6 +99,8 @@ var FullVersionFromCompactVersion map[string]string = map[string]string{
 	"2360": "2.36.0",
 	"2370": "2.37.0",
 	"2380": "2.38.0",
+	"2390": "2.39.0",
+	"2400": "2.40.0",
 }
 
 // The yacfg profile to use for a given full version of broker
@@ -73,6 +124,8 @@ var YacfgProfileVersionFromFullVersion map[string]string = map[string]string{
 	"2.36.0": "2.21.0",
 	"2.37.0": "2.21.0",
 	"2.38.0": "2.21.0",
+	"2.39.0": "2.21.0",
+	"2.40.0": "2.21.0",
 }
 
 var YacfgProfileName string = "artemis"
@@ -98,6 +151,8 @@ var SupportedActiveMQArtemisVersions = []string{
 	"2.36.0",
 	"2.37.0",
 	"2.38.0",
+	"2.39.0",
+	"2.40.0",
 }
 
 func CompactActiveMQArtemisVersion(version string) string {

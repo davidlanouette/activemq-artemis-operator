@@ -33,10 +33,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/configmaps"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
-	"github.com/artemiscloud/activemq-artemis-operator/version"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/configmaps"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/version"
 )
 
 var _ = Describe("jdbc fast failover", func() {
@@ -111,7 +111,7 @@ var _ = Describe("jdbc fast failover", func() {
 							}},
 					},
 				}
-				Expect(k8sClient.Create(ctx, &db)).Should(Succeed())
+				CreateOrOverwriteResource(&db)
 
 				dbService := corev1.Service{
 					TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "core/v1"},
@@ -127,8 +127,7 @@ var _ = Describe("jdbc fast failover", func() {
 						},
 					},
 				}
-
-				Expect(k8sClient.Create(ctx, &dbService)).Should(Succeed())
+				CreateOrOverwriteResource(&dbService)
 
 				By("verifying dbservice has a jdbc endpoint, db is ready!")
 				Eventually(func(g Gomega) {
@@ -199,7 +198,7 @@ var _ = Describe("jdbc fast failover", func() {
 										"initContainers": []interface{}{
 											map[string]interface{}{
 												"name":  "download-jdbc-driver",
-												"image": version.LatestInitImage,
+												"image": version.GetDefaultInitImage(),
 												"command": []interface{}{
 													"sh",
 													"-c",

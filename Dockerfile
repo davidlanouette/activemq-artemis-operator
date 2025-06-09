@@ -1,10 +1,10 @@
 # Build the manager binary
-FROM registry.access.redhat.com/ubi9/go-toolset:1.21.11 as builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.22.7 AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
 
-ENV GO_MODULE=github.com/artemiscloud/activemq-artemis-operator
+ENV GO_MODULE=github.com/arkmq-org/activemq-artemis-operator
 
 ### BEGIN REMOTE SOURCE
 # Use the COPY instruction only inside the REMOTE SOURCE block
@@ -41,7 +41,7 @@ RUN cp -r $REMOTE_SOURCE_DIR/app/* .
 # when is executed on nodes that are booted into FIPS mode.
 RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -ldflags="-X '${GO_MODULE}/version.BuildTimestamp=`date '+%Y-%m-%dT%H:%M:%S'`'" -o manager main.go
 
-FROM registry.access.redhat.com/ubi9-minimal:9.5-1731593028 as base-env
+FROM registry.access.redhat.com/ubi9-minimal:9.5-1742914212 AS base-env
 
 ENV BROKER_NAME=activemq-artemis
 ENV USER_UID=1000
@@ -69,7 +69,7 @@ RUN microdnf update -y --setopt=install_weak_deps=0 && rm -rf /var/cache/yum
 USER ${USER_UID}
 ENTRYPOINT ["${USER_HOME}/bin/entrypoint"]
 
-LABEL name="artemiscloud/activemq-artemis-operator"
+LABEL name="arkmq-org/activemq-artemis-operator"
 LABEL description="ActiveMQ Artemis Broker Operator"
 LABEL maintainer="Roddie Kieley <rkieley@redhat.com>"
-LABEL version="1.2.8"
+LABEL version="2.0.2"

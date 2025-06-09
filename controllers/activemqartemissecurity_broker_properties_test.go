@@ -32,9 +32,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/namer"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/namer"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -112,6 +112,19 @@ var _ = Describe("security without controller", func() {
 				"# rbac, give tom's role send access",
 				"securityRoles.TOMS_WORK_QUEUE.toms.send=true",
 
+				"addressConfigurations.TOPIC.routingTypes=MULTICAST",
+				"addressConfigurations.TOPIC.queueConfigs.FOR_TOM.routingType=MULTICAST",
+				"addressConfigurations.TOPIC.queueConfigs.FOR_TOM.address=TOPIC",
+				"addressConfigurations.TOPIC.queueConfigs.FOR_TOM.durable=true",
+
+				"# rbac topic, give tom's role send access to fqqn, :: needs escape",
+				"securityRoles.\"TOPIC\\:\\:FOR_TOM\".toms.send=true",
+
+				"# amqp acceptor",
+				"acceptorConfigurations.amqp.factoryClassName=org.apache.activemq.artemis.core.remoting.impl.netty.NettyAcceptorFactory",
+				"acceptorConfigurations.amqp.params.host=${HOSTNAME}",
+				"acceptorConfigurations.amqp.params.port=61617",
+
 				"# rbac, give tom's role view/edit access for JMX",
 				"securityRoles.\"mops.address.TOMS_WORK_QUEUE.*\".toms.view=true",
 				"securityRoles.\"mops.address.TOMS_WORK_QUEUE.*\".toms.edit=true",
@@ -128,7 +141,7 @@ var _ = Describe("security without controller", func() {
 			crd.Spec.Env = []corev1.EnvVar{{
 				Name: "JAVA_ARGS_APPEND",
 				// no role check in hawtio as roles are checked by the broker via the guard installed with this ArtemisRbacMBeanServerBuilder
-				Value: "-Dhawtio.role= -Djavax.management.builder.initial=org.apache.activemq.artemis.core.server.management.ArtemisRbacMBeanServerBuilder",
+				Value: "-Dhawtio.roles= -Djavax.management.builder.initial=org.apache.activemq.artemis.core.server.management.ArtemisRbacMBeanServerBuilder",
 			}}
 
 			By("removing management.xml authorization section from artemis create with a resource template patch")
@@ -183,7 +196,7 @@ var _ = Describe("security without controller", func() {
 			By("verify joe cannot see address message count attribute")
 			podWithOrdinal0 := namer.CrToSS(crd.Name) + "-0"
 			originHeader := "Origin: http://" + "localhost" // value not verified but presence necessary
-			curlUrl := "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:address=\"TOMS_WORK_QUEUE\",broker=\"amq-broker\",component=addresses/MessageCount"
+			curlUrl := "http://" + podWithOrdinal0 + ":8161/console/jolokia/read/org.apache.activemq.artemis:address=%22TOMS_WORK_QUEUE%22,broker=%22amq-broker%22,component=addresses/MessageCount"
 			curlCmd := []string{"curl", "-S", "-v", "-H", originHeader, "-u", "joe:joe", curlUrl}
 			Eventually(func(g Gomega) {
 				result, err := RunCommandInPod(podWithOrdinal0, crd.Name+"-container", curlCmd)
@@ -206,13 +219,35 @@ var _ = Describe("security without controller", func() {
 			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 
 			By("verify admin can't call forceFailover")
-			curlUrl = "http://" + podWithOrdinal0 + ":8161/console/jolokia/exec/org.apache.activemq.artemis:broker=\"amq-broker\"/forceFailover"
+			curlUrl = "http://" + podWithOrdinal0 + ":8161/console/jolokia/exec/org.apache.activemq.artemis:broker=%22amq-broker%22/forceFailover"
 			curlCmd = []string{"curl", "-S", "-v", "-H", originHeader, "-u", "admin:admin", curlUrl}
 			Eventually(func(g Gomega) {
 				result, err := RunCommandInPod(podWithOrdinal0, crd.Name+"-container", curlCmd)
 				g.Expect(err).To(BeNil())
 				g.Expect(*result).To(ContainSubstring("403"))
 				g.Expect(*result).To(ContainSubstring("EDIT"))
+			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+			By("Verify send to FQQN")
+			Eventually(func(g Gomega) {
+				result, err := RunCommandInPod(podWithOrdinal0, crd.Name+"-container",
+					[]string{"/bin/sh", "-c", "/opt/amq/bin/artemis producer --protocol=AMQP --user tom --password tom --url tcp://" + podWithOrdinal0 + ":61617 --message-count 10 --destination topic://TOPIC::FOR_TOM"})
+				if verbose {
+					fmt.Printf("err: %v, res: %v\n", err, *result)
+				}
+				g.Expect(err).To(BeNil())
+				g.Expect(*result).To(ContainSubstring("TOPIC::FOR_TOM, thread=0 Produced: 10 messages"))
+			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+
+			By("Verify no permission to send to topic")
+			Eventually(func(g Gomega) {
+				result, err := RunCommandInPod(podWithOrdinal0, crd.Name+"-container",
+					[]string{"/bin/sh", "-c", "/opt/amq/bin/artemis producer --protocol=AMQP --user tom --password tom --url tcp://" + podWithOrdinal0 + ":61617 --message-count 10 --destination topic://TOPIC"})
+				if verbose {
+					fmt.Printf("err: %v, res: %v\n", err, *result)
+				}
+				g.Expect(err).To(BeNil())
+				g.Expect(*result).To(ContainSubstring("tom does not have permission='SEND' on address TOPIC"))
 			}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
 
 			Expect(k8sClient.Delete(ctx, createdCrd)).Should(Succeed())

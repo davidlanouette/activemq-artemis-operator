@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
 	rtclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -235,7 +235,7 @@ func CheckResponse(resp *http.Response, jdata *ResponseData) error {
 		errType := jdata.ErrorType
 		errMsg := jdata.Error
 		errData := jdata.Value
-		internalErr := fmt.Errorf("Error response code %v, type %v, message %v and data %v", errCode, errType, errMsg, errData)
+		internalErr := fmt.Errorf("Error response code %v, type %v, message %v, %v", errCode, errType, errMsg, errData)
 		return internalErr
 	}
 	return &JolokiaError{

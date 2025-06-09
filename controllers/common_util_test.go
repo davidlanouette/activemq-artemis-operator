@@ -26,20 +26,22 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/secrets"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/namer"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/secrets"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/namer"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -51,6 +53,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -69,7 +72,7 @@ import (
 
 var chars = []rune("hgjkmnpqrtvwxyzslbcdaefiou")
 var defaultPassword string = "password"
-var defaultSanDnsNames = []string{"*.apps.artemiscloud.io", "*.tests.artemiscloud.io"}
+var defaultSanDnsNames = []string{"*.apps.arkmq-org.io", "*.tests.arkmq-org.io"}
 var okDefaultPwd = "okdefaultpassword"
 var helmCmd = GetHelmCmd()
 
@@ -96,6 +99,8 @@ func randString() string {
 }
 
 func CleanResourceWithTimeouts(res client.Object, name string, namespace string, cleanTimeout time.Duration, cleanInterval time.Duration) {
+	//batch.kubernetes.io/job-name: consumer
+
 	err := k8sClient.Delete(ctx, res)
 	if errors.IsNotFound(err) {
 		return
@@ -109,6 +114,35 @@ func CleanResourceWithTimeouts(res client.Object, name string, namespace string,
 		}
 		g.Expect(errors.IsNotFound(err)).To(BeTrue())
 	}, cleanTimeout, cleanInterval).Should(Succeed())
+
+	resType := reflect.ValueOf(res).Elem().Type()
+	jobType := reflect.TypeOf(batchv1.Job{})
+
+	if resType == jobType {
+		cfg, err := config.GetConfig()
+		Expect(err).To(BeNil())
+
+		clientset, err := kubernetes.NewForConfig(cfg)
+		Expect(err).To(BeNil())
+
+		// Define the label selector (replace with your label selector)
+		labelSelector := "batch.kubernetes.io/job-name=" + res.GetName()
+
+		// Get the list of pods with the label selector
+		pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+			LabelSelector: labelSelector,
+		})
+		if err != nil {
+			log.Fatalf("Failed to list pods: %v", err)
+		}
+
+		// Delete the selected pods
+		for _, pod := range pods.Items {
+			fmt.Printf("Deleting pod: %s\n", pod.Name)
+			CleanResourceWithTimeouts(&pod, pod.GetName(), pod.GetNamespace(), cleanTimeout, cleanInterval)
+		}
+
+	}
 }
 
 func CleanResource(res client.Object, name string, namespace string) {
@@ -186,10 +220,6 @@ func newArtemisSpecWithFastProbes() brokerv1beta1.ActiveMQArtemisSpec {
 	// sensible fast defaults for tests against existing cluster
 	spec.DeploymentPlan.ReadinessProbe = &corev1.Probe{
 		InitialDelaySeconds: 1,
-		PeriodSeconds:       3,
-	}
-	spec.DeploymentPlan.LivenessProbe = &corev1.Probe{
-		InitialDelaySeconds: 6,
 		PeriodSeconds:       3,
 	}
 
@@ -421,11 +451,12 @@ func RunCommandInPodWithNamespace(podName string, podNamespace string, container
 	}
 
 	var consumerCapturedOut bytes.Buffer
+	var consumerCapturedErr bytes.Buffer
 
 	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  os.Stdin,
 		Stdout: &consumerCapturedOut,
-		Stderr: os.Stderr,
+		Stderr: &consumerCapturedErr,
 		Tty:    false,
 	})
 	if err != nil {
@@ -434,11 +465,13 @@ func RunCommandInPodWithNamespace(podName string, podNamespace string, container
 
 	//try get some content if any
 	Eventually(func(g Gomega) {
-		g.Expect(consumerCapturedOut.Len() > 0)
-	}, existingClusterTimeout, interval).Should(Succeed())
+		g.Expect(consumerCapturedOut.Len() > 0 || consumerCapturedErr.Len() > 0)
+	}, timeout, interval).Should(Succeed())
 
 	content := consumerCapturedOut.String()
-
+	if consumerCapturedErr.Len() > 0 {
+		content += ", err: " + consumerCapturedErr.String()
+	}
 	return &content, nil
 }
 
@@ -674,9 +707,9 @@ func GenerateKeystore(password string, dnsNames []string) ([]byte, error) {
 	ca := &x509.Certificate{
 		SerialNumber: big.NewInt(202305071030),
 		Subject: pkix.Name{
-			CommonName:         "ArtemisCloud Broker",
+			CommonName:         "arkmq-org Broker",
 			OrganizationalUnit: []string{"Broker"},
-			Organization:       []string{"ArtemisCloud"},
+			Organization:       []string{"arkmq-org"},
 		},
 		NotBefore:          time.Now(),
 		NotAfter:           time.Now().AddDate(10, 0, 0),
@@ -938,7 +971,7 @@ func InstallCert(certName string, namespace string, customFunc func(candidate *c
 			SecretName: certName + "-secret",
 			DNSNames:   defaultSanDnsNames,
 			Subject: &cmv1.X509Subject{
-				Organizations: []string{"www.artemiscloud.io"},
+				Organizations: []string{"www.arkmq-org.io"},
 			},
 		},
 	}
@@ -1125,4 +1158,17 @@ func CloneStringMap(original map[string]string) map[string]string {
 		copy[key] = value
 	}
 	return copy
+}
+
+func CreateOrOverwriteResource(res client.Object) {
+	err := k8sClient.Create(ctx, res)
+	if errors.IsAlreadyExists(err) {
+		k8sClient.Delete(ctx, res)
+
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Create(ctx, res)).To(Succeed())
+		}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
+	} else {
+		Expect(err).To(Succeed())
+	}
 }

@@ -9,13 +9,13 @@ import (
 
 	"github.com/RHsyseng/operator-utils/pkg/olm"
 	"github.com/RHsyseng/operator-utils/pkg/resource/compare"
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -714,6 +714,53 @@ func TestProcess_TemplateDuplicateKeyReplacesOk(t *testing.T) {
 		}
 	}
 	assert.True(t, secretFound)
+}
+
+func Test_Respect_existing_JAVA_OPTS_properties_def(t *testing.T) {
+
+	cr := &brokerv1beta1.ActiveMQArtemis{
+		ObjectMeta: metav1.ObjectMeta{Name: "cr"},
+		Spec:       brokerv1beta1.ActiveMQArtemisSpec{},
+	}
+
+	outer := NewActiveMQArtemisReconciler(&NillCluster{}, ctrl.Log.WithName("Test_Respect_existing_JAVA_OPTS_properties_def"), isOpenshift)
+	reconciler := NewActiveMQArtemisReconcilerImpl(cr, outer)
+
+	namer := MakeNamers(cr)
+
+	existingSS := appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: namer.SsNameBuilder.Name()},
+		Spec: appsv1.StatefulSetSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					InitContainers: []v1.Container{
+						{
+							Name: cr.Name + "-container-init",
+							Env: []v1.EnvVar{
+								{
+									Name:  javaOptsEnvVarName,
+									Value: "a",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	reconciler.deployed = make(map[reflect.Type][]client.Object)
+	reconciler.addToDeployed(reflect.TypeOf(appsv1.StatefulSet{}), &existingSS)
+	newSS, _ := reconciler.ProcessStatefulSet(cr, *namer, nil)
+
+	var index = -1
+	for i, env := range newSS.Spec.Template.Spec.InitContainers[0].Env {
+		if env.Name == javaOptsEnvVarName {
+			index = i
+			break
+		}
+	}
+	assert.True(t, index != -1)
+	assert.True(t, strings.Contains(newSS.Spec.Template.Spec.InitContainers[0].Env[index].Value, "properties"))
 }
 
 func TestProcess_TemplateKeyValue(t *testing.T) {

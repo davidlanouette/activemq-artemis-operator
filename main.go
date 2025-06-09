@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artemiscloud/activemq-artemis-operator/version"
+	"github.com/arkmq-org/activemq-artemis-operator/version"
 	"github.com/go-logr/logr"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -42,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"fmt"
 	goruntime "runtime"
@@ -52,18 +51,18 @@ import (
 
 	routev1 "github.com/openshift/api/route/v1"
 
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/log"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/sdkk8sutil"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/log"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/sdkk8sutil"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
 
-	brokerv1alpha1 "github.com/artemiscloud/activemq-artemis-operator/api/v1alpha1"
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
-	brokerv2alpha1 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha1"
-	brokerv2alpha2 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha2"
-	brokerv2alpha3 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha3"
-	brokerv2alpha4 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha4"
-	brokerv2alpha5 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha5"
-	"github.com/artemiscloud/activemq-artemis-operator/controllers"
+	brokerv1alpha1 "github.com/arkmq-org/activemq-artemis-operator/api/v1alpha1"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
+	brokerv2alpha1 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha1"
+	brokerv2alpha2 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha2"
+	brokerv2alpha3 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha3"
+	brokerv2alpha4 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha4"
+	brokerv2alpha5 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha5"
+	"github.com/arkmq-org/activemq-artemis-operator/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -179,11 +178,6 @@ func main() {
 		Metrics: server.Options{
 			BindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
 		},
-		WebhookServer: &webhook.DefaultServer{
-			Options: webhook.Options{
-				Port: 9443,
-			},
-		},
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "d864aab0.amq.io",
@@ -218,10 +212,14 @@ func main() {
 		}
 	}
 
+	defaultNamespaces := make([]string, 0, len(mgrOptions.Cache.DefaultNamespaces))
+	for defaultNamespace := range mgrOptions.Cache.DefaultNamespaces {
+		defaultNamespaces = append(defaultNamespaces, defaultNamespace)
+	}
+
 	setupLog.Info("Manager options",
-		"Namespaces", mgrOptions.Cache.DefaultNamespaces,
+		"Namespaces", defaultNamespaces,
 		"MetricsBindAddress", mgrOptions.Metrics.BindAddress,
-		"Port", mgrOptions.WebhookServer.(*webhook.DefaultServer).Options.Port,
 		"HealthProbeBindAddress", mgrOptions.HealthProbeBindAddress,
 		"LeaderElection", mgrOptions.LeaderElection,
 		"LeaderElectionID", mgrOptions.LeaderElectionID,
@@ -293,25 +291,6 @@ func main() {
 	if err = securityReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ActiveMQArtemisSecurity")
 		os.Exit(1)
-	}
-
-	enableWebhooks := os.Getenv("ENABLE_WEBHOOKS")
-	if enableWebhooks != "false" {
-		setupLog.Info("Setting up webhook functions", "ENABLE_WEBHOOKS", enableWebhooks)
-		if err = (&brokerv1beta1.ActiveMQArtemis{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "ActiveMQArtemis")
-			os.Exit(1)
-		}
-		if err = (&brokerv1beta1.ActiveMQArtemisSecurity{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "ActiveMQArtemisSecurity")
-			os.Exit(1)
-		}
-		if err = (&brokerv1beta1.ActiveMQArtemisAddress{}).SetupWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "ActiveMQArtemisAddress")
-			os.Exit(1)
-		}
-	} else {
-		setupLog.Info("NOT Setting up webhook functions", "ENABLE_WEBHOOKS", enableWebhooks)
 	}
 
 	//+kubebuilder:scaffold:builder

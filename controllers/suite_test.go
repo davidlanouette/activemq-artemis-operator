@@ -59,18 +59,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	brokerv1alpha1 "github.com/artemiscloud/activemq-artemis-operator/api/v1alpha1"
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
-	brokerv2alpha1 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha1"
-	brokerv2alpha2 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha2"
-	brokerv2alpha3 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha3"
-	brokerv2alpha4 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha4"
-	brokerv2alpha5 "github.com/artemiscloud/activemq-artemis-operator/api/v2alpha5"
+	brokerv1alpha1 "github.com/arkmq-org/activemq-artemis-operator/api/v1alpha1"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
+	brokerv2alpha1 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha1"
+	brokerv2alpha2 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha2"
+	brokerv2alpha3 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha3"
+	brokerv2alpha4 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha4"
+	brokerv2alpha5 "github.com/arkmq-org/activemq-artemis-operator/api/v2alpha5"
 
 	//+kubebuilder:scaffold:imports
 
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources/ingresses"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources/ingresses"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
 	tm "github.com/cert-manager/trust-manager/pkg/apis/trust/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -100,7 +100,7 @@ const (
 	specShortNameLimit      = 25
 
 	// Default ingress domain for tests
-	defaultTestIngressDomain = "tests.artemiscloud.io"
+	defaultTestIngressDomain = "tests.arkmq-org.io"
 )
 
 var (
@@ -291,7 +291,7 @@ func setUpTestProxy() {
 	testProxyDeploymentReplicas := int32(1)
 	testProxyName := "test-proxy"
 	testProxyNamespace := "default"
-	testProxyHost := testProxyName + ".tests.artemiscloud.io"
+	testProxyHost := testProxyName + ".tests.arkmq-org.io"
 	testProxyLabels := map[string]string{"app": "test-proxy"}
 	testProxyScript := fmt.Sprintf("yum -y install openssh-server openssl stunnel && "+
 		"adduser --system -u 1000 tunnel && echo secret | passwd tunnel --stdin && "+
@@ -347,7 +347,7 @@ func setUpTestProxy() {
 			},
 		},
 	}
-	createOrOverwriteResource(&testProxyDeployment)
+	CreateOrOverwriteResource(&testProxyDeployment)
 
 	testProxyService := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -364,17 +364,21 @@ func setUpTestProxy() {
 			},
 		},
 	}
-	createOrOverwriteResource(&testProxyService)
+	CreateOrOverwriteResource(&testProxyService)
 
 	testProxyIngress := ingresses.NewIngressForCRWithSSL(
 		nil, types.NamespacedName{Name: testProxyName, Namespace: testProxyNamespace},
 		map[string]string{}, testProxyName+"-dep-svc", strconv.FormatInt(int64(testProxyPort), 10),
 		true, "", testProxyHost, isOpenshift)
-	createOrOverwriteResource(testProxyIngress)
+	CreateOrOverwriteResource(testProxyIngress)
 
 	if os.Getenv("USE_EXISTING_CLUSTER") == "true" {
 		Eventually(func(g Gomega) {
-			tlsConn, tlsErr := tls.Dial("tcp", clusterIngressHost+":443",
+			tlsDialer := new(net.Dialer)
+			// The tls proxy dialer timeout reduce the proxy setup time because the
+			// fisrt connection usually fails and TCP timeouts are often around 3 mins
+			tlsDialer.Timeout = 3 * time.Second
+			tlsConn, tlsErr := tls.DialWithDialer(tlsDialer, "tcp", clusterIngressHost+":443",
 				&tls.Config{ServerName: testProxyHost, InsecureSkipVerify: true})
 			g.Expect(tlsErr).Should(BeNil())
 			tlsConn.Close()
@@ -469,19 +473,6 @@ func cleanUpTestProxy() {
 
 	err = k8sClient.Delete(ctx, &testProxyIngress)
 	Expect(err == nil || errors.IsNotFound(err)).To(BeTrue())
-}
-
-func createOrOverwriteResource(res client.Object) {
-	err := k8sClient.Create(ctx, res)
-	if errors.IsAlreadyExists(err) {
-		k8sClient.Delete(ctx, res)
-
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Create(ctx, res)).To(Succeed())
-		}, existingClusterTimeout, existingClusterInterval).Should(Succeed())
-	} else {
-		Expect(err).To(Succeed())
-	}
 }
 
 func createControllerManagerForSuite() {
@@ -702,7 +693,7 @@ func uninstallYamlResource(resPath string, namespace string) error {
 	return nil
 }
 
-func installYamlResource(resPath string, envMap map[string]string, namespace string) error {
+func installYamlResource(resPath string, setupEnvs map[string]string, namespace string) error {
 	ctrl.Log.Info("Installing yaml resource", "yaml", resPath)
 	robj, gkv, err := loadYamlResource(resPath)
 	if err != nil {
@@ -719,13 +710,38 @@ func installYamlResource(resPath string, envMap map[string]string, namespace str
 			ctrl.Log.Info("Using custom operator image", "url", oprImg)
 			oprObj.Spec.Template.Spec.Containers[0].Image = oprImg
 		}
-		for k, v := range envMap {
-			ctrl.Log.Info("Adding new env var into operator", "name", k, "value", v)
-			newEnv := corev1.EnvVar{
-				Name:  k,
-				Value: v,
+
+		// update default envs
+		defaultEnvs := []string{
+			"DEFAULT_BROKER_VERSION",
+			"DEFAULT_BROKER_COMPACT_VERSION",
+			"DEFAULT_BROKER_KUBE_IMAGE",
+			"DEFAULT_BROKER_INIT_IMAGE",
+		}
+		for _, defaultEnv := range defaultEnvs {
+			defaultEnvValue := os.Getenv(defaultEnv)
+			if defaultEnvValue != "" {
+				oprObj.Spec.Template.Spec.Containers[0].Env =
+					putEnv(oprObj.Spec.Template.Spec.Containers[0].Env,
+						defaultEnv, defaultEnvValue)
 			}
-			oprObj.Spec.Template.Spec.Containers[0].Env = append(oprObj.Spec.Template.Spec.Containers[0].Env, newEnv)
+		}
+
+		// update releated image envs
+		for _, env := range os.Environ() {
+			if strings.HasPrefix(env, "RELATED_IMAGE_") {
+				relatedImageEnv := strings.SplitN(env, "=", 2)
+				oprObj.Spec.Template.Spec.Containers[0].Env =
+					putEnv(oprObj.Spec.Template.Spec.Containers[0].Env,
+						relatedImageEnv[0], relatedImageEnv[1])
+			}
+		}
+
+		// update setup envs
+		for setupEnvName, setupEnvValue := range setupEnvs {
+			oprObj.Spec.Template.Spec.Containers[0].Env =
+				putEnv(oprObj.Spec.Template.Spec.Containers[0].Env,
+					setupEnvName, setupEnvValue)
 		}
 	}
 
@@ -743,6 +759,24 @@ func installYamlResource(resPath string, envMap map[string]string, namespace str
 
 	ctrl.Log.Info("Successfully installed", "yaml", resPath)
 	return nil
+}
+
+func putEnv(envs []corev1.EnvVar, envName string, envValue string) []corev1.EnvVar {
+	ctrl.Log.Info("Putting env var into operator", "name", envName, "value", envValue)
+
+	envFound := false
+	for i := 0; i < len(envs) && !envFound; i++ {
+		envFound = envName == envs[i].Name
+		if envFound {
+			envs[i].Value = envValue
+		}
+	}
+
+	if !envFound {
+		envs = append(envs, corev1.EnvVar{Name: envName, Value: envValue})
+	}
+
+	return envs
 }
 
 func setUpK8sClient() {

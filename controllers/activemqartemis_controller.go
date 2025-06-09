@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,6 +30,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,16 +41,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/resources"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/certutil"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/namer"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/resources"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/certutil"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/namer"
 	"github.com/go-logr/logr"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/pkg/errors"
 
-	brokerv1beta1 "github.com/artemiscloud/activemq-artemis-operator/api/v1beta1"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/common"
-	"github.com/artemiscloud/activemq-artemis-operator/pkg/utils/selectors"
+	brokerv1beta1 "github.com/arkmq-org/activemq-artemis-operator/api/v1beta1"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/common"
+	"github.com/arkmq-org/activemq-artemis-operator/pkg/utils/selectors"
 )
 
 var namespaceToConfigHandler = make(map[types.NamespacedName]common.ActiveMQArtemisConfigHandler)
@@ -163,6 +165,12 @@ func (r *ActiveMQArtemisReconciler) Reconcile(ctx context.Context, request ctrl.
 		reqLogger.Error(err, "unable to retrieve the ActiveMQArtemis")
 		return result, err
 	}
+	var reconcileBlocked bool = false
+	if val, present := customResource.Annotations[common.BlockReconcileAnnotation]; present {
+		if boolVal, err := strconv.ParseBool(val); err == nil {
+			reconcileBlocked = boolVal
+		}
+	}
 
 	namer := MakeNamers(customResource)
 	reconciler := NewActiveMQArtemisReconcilerImpl(customResource, r)
@@ -171,13 +179,15 @@ func (r *ActiveMQArtemisReconciler) Reconcile(ctx context.Context, request ctrl.
 	var valid bool = false
 	if valid, requeueRequest = reconciler.validate(customResource, r.Client, *namer); valid {
 
-		err = reconciler.Process(customResource, *namer, r.Client, r.Scheme)
-
+		if !reconcileBlocked {
+			err = reconciler.Process(customResource, *namer, r.Client, r.Scheme)
+		}
 		if reconciler.ProcessBrokerStatus(customResource, r.Client, r.Scheme) {
 			requeueRequest = true
 		}
 	}
 
+	common.UpdateBlockedStatus(customResource, reconcileBlocked)
 	common.ProcessStatus(customResource, r.Client, request.NamespacedName, *namer, err)
 
 	crStatusUpdateErr := r.UpdateCRStatus(customResource, r.Client, request.NamespacedName)
@@ -185,12 +195,9 @@ func (r *ActiveMQArtemisReconciler) Reconcile(ctx context.Context, request ctrl.
 		requeueRequest = true
 	}
 
-	if !requeueRequest {
-		reqLogger.V(1).Info("resource successfully reconciled")
-		if hasExtraMounts(customResource) {
-			reqLogger.V(1).Info("resource has extraMounts, requeuing")
-			requeueRequest = true
-		}
+	if !requeueRequest && hasExtraMounts(customResource) {
+		reqLogger.V(1).Info("resource has extraMounts, requeuing")
+		requeueRequest = true
 	}
 
 	if requeueRequest {
@@ -198,6 +205,9 @@ func (r *ActiveMQArtemisReconciler) Reconcile(ctx context.Context, request ctrl.
 		result = ctrl.Result{RequeueAfter: common.GetReconcileResyncPeriod()}
 	}
 
+	if valid && err == nil && crStatusUpdateErr == nil {
+		reqLogger.V(1).Info("resource successfully reconciled")
+	}
 	return result, err
 }
 
@@ -223,6 +233,13 @@ func (r *ActiveMQArtemisReconcilerImpl) validate(customResource *brokerv1beta1.A
 
 	if validationCondition.Status != metav1.ConditionFalse {
 		condition, retry = validateNoDupKeysInBrokerProperties(customResource)
+		if condition != nil {
+			validationCondition = *condition
+		}
+	}
+
+	if validationCondition.Status != metav1.ConditionFalse {
+		condition, retry = r.validateStorage()
 		if condition != nil {
 			validationCondition = *condition
 		}
@@ -437,6 +454,24 @@ func (r *ActiveMQArtemisReconcilerImpl) validateEnvVars(customResource *brokerv1
 			Reason:  brokerv1beta1.ValidConditionInvalidInternalVarUsage,
 			Message: fmt.Sprintf("Don't use valueFrom on env vars that the operator can mutate: %v. Instead use a different var and refernece it in its value field.", invalidVars),
 		}, false
+	}
+	return nil, false
+}
+
+func (r *ActiveMQArtemisReconcilerImpl) validateStorage() (*metav1.Condition, bool) {
+
+	if r.customResource.Spec.DeploymentPlan.PersistenceEnabled {
+		if r.customResource.Spec.DeploymentPlan.Storage.Size != "" {
+			_, err := resource.ParseQuantity(r.customResource.Spec.DeploymentPlan.Storage.Size)
+			if err != nil {
+				return &metav1.Condition{
+					Type:    brokerv1beta1.ValidConditionType,
+					Status:  metav1.ConditionFalse,
+					Reason:  brokerv1beta1.ValidConditionFailureReason,
+					Message: fmt.Sprintf(".Spec.DeploymentPlan.Storage.Size quantity string is invalid, %v", err),
+				}, false
+			}
+		}
 	}
 	return nil, false
 }
@@ -862,9 +897,11 @@ type ArtemisError interface {
 	Requeue() bool
 }
 
-type unknownJolokiaError struct {
-	cause error
+type artemisStatusError struct {
+	cause     error
+	transient bool
 }
+
 type jolokiaClientNotFoundError struct {
 	cause error
 }
@@ -881,18 +918,19 @@ type versionMismatchError struct {
 	cause string
 }
 
-func NewUnknownJolokiaError(err error) unknownJolokiaError {
-	return unknownJolokiaError{
+func NewArtemisStatusError(err error, transient bool) artemisStatusError {
+	return artemisStatusError{
 		err,
+		transient,
 	}
 }
 
-func (e unknownJolokiaError) Error() string {
+func (e artemisStatusError) Error() string {
 	return e.cause.Error()
 }
 
-func (e unknownJolokiaError) Requeue() bool {
-	return false
+func (e artemisStatusError) Requeue() bool {
+	return e.transient
 }
 
 func NewJolokiaClientsNotFoundError(err error) jolokiaClientNotFoundError {
